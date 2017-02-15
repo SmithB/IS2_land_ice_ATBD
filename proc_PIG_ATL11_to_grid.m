@@ -119,7 +119,7 @@ for k_run=1:N_runs
     
     D.year=D.t/365;
     [grids, G, Gc, TOC, D]=est_dh_dt_fd('build_G',D, M);
-    Cvals=est_dh_dt_ft('calc_Cvals', D.sigma, M.sigma, TOC);
+    Cvals=est_dh_dt_fd('calc_Cvals', D.sigma, M.sigma, TOC);
     d_c=zeros(size(Gc(:,1)));
     good=true(size(D.h));
     
