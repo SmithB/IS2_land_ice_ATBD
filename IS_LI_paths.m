@@ -7,7 +7,7 @@ S.alg_version='/v12_hdf';
 S.ATL03=[S.data_root,S.alg_version,'/PIG_ATL03'];
 S.ATL06=[S.data_root,S.alg_version,'/PIG_ATL06'];
 S.ATL11=[S.data_root,S.alg_version,'/PIG_ATL11_6segs_', run_type];
-S.ATL1314=[S.data_root,S.alg_version,'/PIG_ATL11_6segs_', run_type];
+S.ATL14=[S.data_root,S.alg_version,'/PIG_ATL14_6segs_', run_type];
 S.DEM_dir=[S.data_root,'/PIG_DEM'];
 
 

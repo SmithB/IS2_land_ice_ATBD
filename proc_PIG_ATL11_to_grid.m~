@@ -13,10 +13,8 @@ N_runs=length(strsplit(deblank(out)));
 
 
 for k_run=1:N_runs
-    ATL11_dir=sprintf('%s/run_%d',IS_paths.ATL11, k_run);
-
-    ATL14_dir=sprintf('%s/run_%d',IS_paths.ATL14, k_run);
-    if ~exist(ATL14_dir,'dir'); mkdir(ATL14_dir); end
+    ATL14_dir=sprintf('%s/run_%d',IS_paths.ATL11, k_run);
+    if ~exist(ATL14_dir,'dir'); mkdir(ATL14_dir);
     out_file=[ATL14_dir,'/ATL14_solution.mat'];
     
     % !!! skip the lock check !!!
