@@ -223,7 +223,7 @@ Cvals.Gc(TOC.eqn_type==eq_key.smooth_z0)=sigma.smooth_z0.^2;
 Cvals.Gc(TOC.eqn_type==eq_key.flat_z0)=sigma.smooth_z0.^2*sigma.line_spacing_z0.^2;
 Cvals.Gc(TOC.eqn_type==eq_key.zero_dz_at_t0)=sigma.smooth_z0.^2/1e4;
 Cvals.Gc(TOC.eqn_type==eq_key.smooth_season_dz)=sigma.smooth_season_dz.^2;
-if isfield(M.sigma,'time_gap')
+if isfield(sigma,'time_gap')
     Cvals.Gc(TOC.eqn_type==eq_key.flat_season_dz)=sigma.smooth_season_dz.^2*sigma.time_gap.^2;
 end
  

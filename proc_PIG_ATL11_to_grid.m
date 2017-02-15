@@ -89,7 +89,7 @@ for k_run=1:N_runs
     end
     
     
-    [M.dx, M.dy]=deal(250);
+    [M.dx, M.dy]=deal(500);
     [M.dx0, M.dy0]=deal(125);
     M.dt=0.25;
     
