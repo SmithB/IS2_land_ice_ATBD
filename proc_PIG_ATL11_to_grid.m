@@ -153,7 +153,7 @@ for k_run=1:N_runs
     [xg, yg]=meshgrid(dz.x, dz.y);
     mask=false(size(xg));
     mask(ismember(xg+1i*yg, round_to(D.x+1i*D.y, M.dx)))=true;
-    dz.mask=dilate_mask(mask, 4);
+    dz.mask=dilate_mask(mask, 5000/M.dx);
     
     % mask of constrained DEM points
     z0.x=grids.z0.ctrs{2};
@@ -162,7 +162,7 @@ for k_run=1:N_runs
     [xg0, yg0]=meshgrid(z0.x, z0.y);
     mask=false(size(xg0));
     mask(ismember(xg0+1i*yg0, round_to(D.x+1i*D.y, M.dx)))=true;
-    z0.mask=double(dilate_mask(mask, 4*floor(M.dx/M.dx0)));
+    z0.mask=double(dilate_mask(mask, 5000/M.dx0));
     z0.mask(z0.mask==0)=NaN;
     
     % display the output
