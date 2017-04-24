@@ -10,4 +10,4 @@ function x=poisson_rv(lambda, N)
 % 
 %  
 
-x=gammaincinv(randn(N,1), lambda);
+x=gammaincinv(rand(N,1), lambda);
