@@ -80,7 +80,7 @@ for k=1:length(x0);
     D0(k).SigNoise=true(N_sig,1);
     
     N_noise=params.NoiseRate*params.H_window/(params.c/2);
-    NoiseCount=poisson_rv(N_noise,1);
+    NoiseCount=round(poisson_rv(N_noise,1));
     if NoiseCount>0;
         D0(k).xground=[D0(k).xground; x0(k)+zeros(NoiseCount,1)];
         D0(k).pulse_num=[D0(k).pulse_num; k+zeros(NoiseCount,1)];
