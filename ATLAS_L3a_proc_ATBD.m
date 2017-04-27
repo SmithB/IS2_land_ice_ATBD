@@ -188,7 +188,7 @@ for k0=1:length(seg_list)
         
         if D3(k0, kB).signal_selection_source ==2 &&  D3(k0, kB).signal_selection_status_backup ~=3  % not enough confident or padded PE have been found, fall back to alternate strategies
             [initial_fit_els, D3(k0, kB).signal_selection_source, D3(k0, kB).signal_selection_status_backup]=...
-                backup_signal_finding_strategy(D2sub_unfilt(kB), D2(kB), seg_list(k0), 20);
+                backup_signal_finding_strategy(D2sub_unfilt(kB), D2(kB), seg_list(k0), 10);
             D2sub(kB)=index_struct(D2sub_unfilt(kB), initial_fit_els);
             initial_fit_els=true(size(D2sub(kB).h));
             D3(k0, kB).w_surface_window_initial=10;
