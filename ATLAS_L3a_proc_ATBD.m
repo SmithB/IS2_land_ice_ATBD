@@ -1,4 +1,19 @@
-function [D3a, dh_hist, LOG]=ATLAS_L3a_proc_ATBD(D2, params, which_seg)
+function  varargout=ATLAS_L3a_proc_ATBD(varargin)
+
+% wrapper function for ATL03->ATL06 processing.   
+if isstruct(varargin{1})
+    [varargout{1:nargout}]=feval('ATL03_to_ATL06', varargin{:});
+else
+    if nargout>0
+        [varargout{1:nargout}]=feval( varargin{:});
+    else
+        feval(varargin{:});
+    end
+end
+
+%-------------------------------------------------------
+
+function [D3a, dh_hist, LOG]=ATL03_to_ATL06(D2, params, which_seg)
 
 % ATLAS_L3a_proc_ATBD(D2, params, which_L)
 % Inputs:
@@ -173,7 +188,7 @@ for k0=1:length(seg_list)
         
         if D3(k0, kB).signal_selection_source ==2 &&  D3(k0, kB).signal_selection_status_backup ~=3  % not enough confident or padded PE have been found, fall back to alternate strategies
             [initial_fit_els, D3(k0, kB).signal_selection_source, D3(k0, kB).signal_selection_status_backup]=...
-                backup_signal_finding_strategy(D2sub_unfilt(kB), D2(kB), seg_list(k0), 10);
+                backup_signal_finding_strategy(D2sub_unfilt(kB), D2(kB), seg_list(k0), 20);
             D2sub(kB)=index_struct(D2sub_unfilt(kB), initial_fit_els);
             initial_fit_els=true(size(D2sub(kB).h));
             D3(k0, kB).w_surface_window_initial=10;
@@ -408,7 +423,7 @@ D3.N_initial=sum(els);
 if SAVELOG; LOG.G=G; end
 % iterate to reduce residuals
 Noise_Ph_per_m=diff(range(D2.pulse_num))*median(D2.BGR)/c2;
-H_win=diff(range(D2.h));
+H_win=diff(range(D2.h(els)));
 for k=1:N_it
     m_last=m;
     m=G(els,:)\D2.h(els);
@@ -421,7 +436,7 @@ for k=1:N_it
     els_last=els;
     SNR_last=sum(els)/(H_win*Noise_Ph_per_m);
     H_win_last=H_win;
-    H_win=max([2*[sigma_expected, sigma_r]*options.Nsigma, options.Hwin_min]);
+    H_win=max([2*[sigma_expected, sigma_r]*options.Nsigma, 0.75*H_win_last, options.Hwin_min]);
     els=abs(r_all ) < H_win/2;
     
     if SAVELOG
@@ -448,6 +463,7 @@ for k=1:N_it
     if sum(abs(els_last-els))==0  % no change from last iteration, or we've converged.
         break
     end
+    %find(els_last-els)
 end
 
 % plotting command:
@@ -570,11 +586,18 @@ end
 h=D2_all.h(these);
 bins=(floor(min(h))+0.25):0.5:ceil(max(h));
 count=my_histc(h, bins);
-% lazy programming: the count for bin +-W is fond by convolving with a
+% lazy programming: the count for bin +-W is found by convolving with a
 % boxcar 2W high
 C1=conv(count(:), ones(2*W, 1),'same');
-z0=mean(bins(C1>max(C1)-sqrt(max(C1))));
-selected_PE=abs(D2_local.h-z0)<W/2;
+
+% procede if more than 15 PE are in the best bin
+if max(C1) > 20   
+    % select the bins that are not significantly differnt from the peak
+    z0r=range(bins(C1>max(C1)-sqrt(max(C1))));
+    selected_PE=D2_local.h >= z0r(1)-W/2 & D2_local.h <= z0r(2)+W/2;
+else
+    selected_PE =[];
+end
 if sum(selected_PE) > 10 &&  diff(range(D2_local.x_RGT(selected_PE)))>20
     signal_selection_source=2;
     signal_selection_status=1;
