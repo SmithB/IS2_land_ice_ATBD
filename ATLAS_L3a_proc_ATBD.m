@@ -424,21 +424,25 @@ if SAVELOG; LOG.G=G; end
 % iterate to reduce residuals
 Noise_Ph_per_m=diff(range(D2.pulse_num))*median(D2.BGR)/c2;
 H_win=diff(range(D2.h(els)));
+
+filter_hist=false(N_it, numel(D2.h));
+
 for k=1:N_it
     m_last=m;
     m=G(els,:)\D2.h(els);
     
     r_all=D2.h-G*m;
     r0=r_all(els);
-    sigma_r=robust_peak_width_CDF(r0, Noise_Ph_per_m*H_win, [0 H_win]-H_win/2);
+    sigma_r=min(5,robust_peak_width_CDF(r0, Noise_Ph_per_m*H_win, [0 H_win]-H_win/2));
     sigma_expected=sqrt((c2*params.sigma_pulse).^2+params.sigma_x.^2*(m(2).^2));
     
     els_last=els;
+    filter_hist(k,:)=els;
     SNR_last=sum(els)/(H_win*Noise_Ph_per_m);
     H_win_last=H_win;
+    
     H_win=max([2*[sigma_expected, sigma_r]*options.Nsigma, 0.75*H_win_last, options.Hwin_min]);
     els=abs(r_all ) < H_win/2;
-    
     if SAVELOG
         LOG.iterations(k).els=els;
         LOG.iterations(k).sigma_r=sigma_r;
@@ -447,13 +451,8 @@ for k=1:N_it
         LOG.iterations(k).h_ctr=m(1);
         LOG.iterations(k).dhdx=m(2);
     end
-    
-    SNR=sum(els)/(H_win*Noise_Ph_per_m);
-    
-    % The last || is experimental-- does it help to quit iterating if SNR
-    % decreases?
-    % A: No.  Not helpful.
-    if sum(els) < 10 || diff(range(D2.x_RGT(els))) < 20  %|| SNR < (SNR_last-1/(H_win*Noise_Ph_per_m));
+     
+    if sum(els) < 10 || diff(range(D2.x_RGT(els))) < 20   
         m=m_last;
         H_win=H_win_last;
         els=els_last;
@@ -463,7 +462,11 @@ for k=1:N_it
     if sum(abs(els_last-els))==0  % no change from last iteration, or we've converged.
         break
     end
-    %find(els_last-els)
+ 
+    %check if we've tested this collection of elements before
+    if any(all(els(:)'==filter_hist(1:k,:),2));
+        break
+    end
 end
 
 % plotting command:
