@@ -191,7 +191,7 @@ for k0=1:length(seg_list)
                 backup_signal_finding_strategy(D2sub_unfilt(kB), D2(kB), seg_list(k0), 10);
             D2sub(kB)=index_struct(D2sub_unfilt(kB), initial_fit_els);
             initial_fit_els=true(size(D2sub(kB).h));
-            D3(k0, kB).w_surface_window_initial=10;
+            D3(k0, kB).w_surface_window_initial=diff(range(D2sub_unfilt(kB).h));
             D3(k0, kB).h_initial=mean(D2sub(kB).h(initial_fit_els));
         end
         if SAVELOG; LOG(k0, kB).initial_fit_els=initial_fit_els; end
