@@ -55,8 +55,9 @@ for kf=1:length(out_files)
     D3=read_sim_ATL03([ATL03_dir, S.fname,'.h5'], str2double(S.pair));
     
     figure(kf);
-    for kB=1:2
-        subplot(2,1,kB);
+    for ii=1:2
+        kB=(str2num(S.pair)-1)*2+ii;
+        subplot(2,1,ii);
         [II.z, II.x, II.y]=point_count_image(D3(kB).x_RGT, double(D3(kB).h_ph), 10, [YR(1) 1 YR(2)]);
         imagesc(II.x, II.y, II.z); hold on; caxis([0 100]); colormap(gray);
         plot(D6.x_RGT(:,kB), D6.h_mean(:, kB),'r.');
