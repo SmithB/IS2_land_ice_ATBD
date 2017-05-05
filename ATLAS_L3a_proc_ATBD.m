@@ -13,7 +13,7 @@ end
 
 %-------------------------------------------------------
 
-function [D3a, dh_hist, LOG]=ATL03_to_ATL06(D2, params, which_seg)
+function [D3a, dh_hist, LOG]=ATL03_to_ATL06(D2, params, which_seg, SNR_F_table)
 
 % ATLAS_L3a_proc_ATBD(D2, params, which_L)
 % Inputs:
@@ -96,7 +96,7 @@ end
 
 seg_list=unique(cat(1, D2.seg_num));
 
-if exist('which_seg','var')
+if exist('which_seg','var') && ~isempty(which_seg);
     seg_list=seg_list(find(abs(seg_list-which_seg)==min(abs(seg_list-which_seg)), 1, 'first'));
 end
 
@@ -118,7 +118,7 @@ D3_fields={ 'segment_id', 'signal_selection_source', ...
     'TX_med_corr','TX_mean_corr', 'h_LI', 'h_LI_sigma', 'z0','m0', 'x_RGT','y_RGT', ...
     'lat_ctr','lon_ctr', ...
     'fpb_med_corr_sigma','fpb_mean_corr_sigma', ...
-    'first_seg_pulse','N_seg_pulses','time','SNR','exit_iteration', ...
+    'first_seg_pulse','N_seg_pulses','time','SNR', 'SNR_significance','exit_iteration', ...
     'surface_detection_failed','surface_height_invalid','cross_track_slope_invalid' ,'fpb_correction_failed'};
 
 for kf=1:length(D3_fields)
@@ -186,13 +186,17 @@ for k0=1:length(seg_list)
             end
         end
         
+        h_range_initial=[NaN NaN];
         if D3(k0, kB).signal_selection_source ==2 &&  D3(k0, kB).signal_selection_status_backup ~=3  % not enough confident or padded PE have been found, fall back to alternate strategies
             [initial_fit_els, D3(k0, kB).signal_selection_source, D3(k0, kB).signal_selection_status_backup]=...
                 backup_signal_finding_strategy(D2sub_unfilt(kB), D2(kB), seg_list(k0), 10);
             D2sub(kB)=index_struct(D2sub_unfilt(kB), initial_fit_els);
             initial_fit_els=true(size(D2sub(kB).h));
-            D3(k0, kB).w_surface_window_initial=diff(range(D2sub_unfilt(kB).h));
+            h_range_initial(kB)=diff(range(D2sub_unfilt(kB).h));
+            D3(k0, kB).w_surface_window_initial=diff(range(D2sub(kB).h));
             D3(k0, kB).h_initial=mean(D2sub(kB).h(initial_fit_els));
+        else
+            h_range_initial(kB)=D3(k0, kB).w_surface_window_initial;
         end
         if SAVELOG; LOG(k0, kB).initial_fit_els=initial_fit_els; end
                 
@@ -244,7 +248,19 @@ for k0=1:length(seg_list)
             else
                 D3(k0, kB).TX_med_corr=0;
             end
+            
+            % Calculate the final h_LI
             D3(k0, kB).h_LI=D3(k0, kB).h_mean + D3(k0, kB).fpb_med_corr + D3(k0, kB).TX_med_corr;
+            
+            % calculate the SNR significance
+            if exist('SNR_F_table','var')
+                D3(k0, kB).SNR_significance=...
+                    interpn(SNR_F_table.SNR, SNR_F_table.W_surface_window_initial, SNR_F_table.BGR, SNR_F_table.P_NoiseOnly, ...
+                max(min(SNR_F_table.SNR), min(max(SNR_F_table.SNR), D3(k0, kB).SNR)), ...
+                max(3, min(max(SNR_F_table.W_surface_window_initial), h_range_initial(kB))), ...
+                max(min(SNR_F_table.BGR), min(max(SNR_F_table.BGR) , D3(k0, kB).BGR)));
+            end
+            
             
             if false
                 % extra code to estimate the true fpb error
