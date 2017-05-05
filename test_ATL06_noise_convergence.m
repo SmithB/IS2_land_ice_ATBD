@@ -54,15 +54,17 @@ if false
         end
     end 
     
-    h5create('SNR_F_table.h5','/P_NoiseOnly', [301, 14, 20],'datatype','double')
-    h5write('SNR_F_table.h5','/P_NoiseOnly', SNR_F_table.F)
-    h5create('SNR_F_table.h5','/SNR', 301 ,'datatype','double') 
-    h5write('SNR_F_table.h5','/SNR', SNR_F_table.SNR)
- 
-    h5create('SNR_F_table.h5','/BGR', 20,'datatype','double')
-    h5write('SNR_F_table.h5','/BGR', SNR_F_table.BGR)
-    h5create('SNR_F_table.h5','/W_surface_window_initial', 14,'datatype','double')
-    h5write('SNR_F_table.h5','/W_surface_window_initial', SNR_F_table.Hwin_initial)
+    if false  % DON't do this until you are ready to overwrite the existing table
+        h5create('SNR_F_table.h5','/P_NoiseOnly', [301, 14, 20],'datatype','double')
+        h5write('SNR_F_table.h5','/P_NoiseOnly', SNR_F_table.F)
+        h5create('SNR_F_table.h5','/SNR', 301 ,'datatype','double')
+        h5write('SNR_F_table.h5','/SNR', SNR_F_table.SNR)
+        
+        h5create('SNR_F_table.h5','/BGR', 20,'datatype','double')
+        h5write('SNR_F_table.h5','/BGR', SNR_F_table.BGR)
+        h5create('SNR_F_table.h5','/W_surface_window_initial', 14,'datatype','double')
+        h5write('SNR_F_table.h5','/W_surface_window_initial', SNR_F_table.Hwin_initial)
+    end
 end
 
 
