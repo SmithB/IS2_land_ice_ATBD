@@ -6,7 +6,7 @@ N_chan=[4, 16];  %weak beam (but doesn't matter much for noise)
 load WF_est;   
 
  for kBG=1:1%length(BGR_vals);
-    this_file=sprintf('noise_test_files/BGR=%3.2f.h5\n', BGR_vals(kBG)/1e6);
+    this_file=sprintf('noise_test_files/BGR=%3.2f.h5', BGR_vals(kBG)/1e6);
     
     clear D2a;
     for kB=1:2
@@ -21,7 +21,7 @@ load WF_est;
         D2.segment_number=floor(D2.pulse_num/29);
         D2.x_RGT=D2.pulse_num*0.7;
         D2.y_RGT=90*(kB-0.5)*ones(size(D2.h));
-        D2.time=D2.t_ph;
+        D2.time=D2.pulse_num/1e4 + D2.t_ph;
         D2.ph_class=zeros(size(D2.h));
         [D2.beam, D2.track]=deal(ones(size(D2.h))*kB);
         
