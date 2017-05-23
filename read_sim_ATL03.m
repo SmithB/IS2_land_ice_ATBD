@@ -1,4 +1,4 @@
-function [H, D, params]=read_sim_ATL03(filename, pairs)
+function [H, D, params, dist_for_segment]=read_sim_ATL03(filename, pairs)
 
 if ~exist('pairs','var')
     pairs=1:3;
@@ -9,7 +9,6 @@ beams=sort([2*pairs(:)-1; 2*pairs(:)]);
 
 GT={'1','2','3'};
 LR={'l','r'};
-
 out_struct.geolocation=struct(...
     'segment_dist_x',[],...
     'segment_id', [], ...
@@ -31,7 +30,7 @@ out_struct.heights=struct(...
     'ph_id_pulse', [], ...
     'ph_id_channel',[], ...
     'signal_conf_ph', []);
-out_struct.bckgrd_atlas=struct('bckgrd_rate', [],'pce_mframe_cnt',[]);
+out_struct.bckgrd_atlas=struct('bckgrd_rate', [],'pce_mframe_cnt',[],'delta_time', []);
 
 D=repmat(out_struct, [max(beams),1]);
 
@@ -79,27 +78,31 @@ for beam=beams(:)' %length(D)
     [H(beam).ph_seg_num, ...
         H(beam).x_RGT, ...
         H(beam).seg_dist_x, ...
-        H(beam).ph_seg_num, ...
         H(beam).BGR, ...
         H(beam).sigma_across, ...
         H(beam).sigma_along]=deal(NaN(size(D(beam).heights.h_ph)));
-    for k=1:length(D(beam).geolocation.ph_index_beg);
+    for k=1:length(D(beam).geolocation.ph_index_beg)
         ind_range=D(beam).geolocation.ph_index_beg(k)+int64([0 D(beam).geolocation.segment_ph_cnt(k)-1]);
         if all(ind_range~=0)
             H(beam).ph_seg_num(ind_range(1):ind_range(2))=k;
         end
+         
     end
+    
     these=isfinite(H(beam).ph_seg_num);
     H(beam).seg_dist_x(these)=D(beam).geolocation.segment_dist_x(H(beam).ph_seg_num(these));
     H(beam).sigma_across(these)=D(beam).geolocation.sigma_across(H(beam).ph_seg_num(these));
     H(beam).sigma_along(these)=D(beam).geolocation.sigma_along(H(beam).ph_seg_num(these));
         
     H(beam).x_RGT(these)=D(beam).geolocation.segment_dist_x(H(beam).ph_seg_num(these))+H(beam).dist_ph_along(these);
-    good=isfinite(H(beam).x_RGT) & H(beam).pce_mframe_cnt>0 & H(beam).pce_mframe_cnt < length(D(beam).bckgrd_atlas.bckgrd_rate);
-    H(beam).BGR(good)=D(beam).bckgrd_atlas.bckgrd_rate(H(beam).pce_mframe_cnt(good));
+    good=isfinite(H(beam).x_RGT) & H(beam).pce_mframe_cnt>0; %& H(beam).pce_mframe_cnt < length(D(beam).bckgrd_atlas.bckgrd_rate);
+    %H(beam).BGR(good)=D(beam).bckgrd_atlas.bckgrd_rate(H(beam).pce_mframe_cnt(good));
+    H(beam).BGR(good)=interp1(D(beam).bckgrd_atlas.delta_time, D(beam).bckgrd_atlas.bckgrd_rate, H(beam).delta_time(good));
     H(beam).pulse_num=200*double(H(beam).pce_mframe_cnt)+double(H(beam).ph_id_pulse);
     H(beam).beam=zeros(size(H(beam).h_ph))+beam;
     H(beam).h_ph=double(H(beam).h_ph);
+    
+    dist_for_segment{beam}=D(beam).geolocation.segment_dist_x;
 end
 
 
