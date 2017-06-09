@@ -11,14 +11,14 @@ if isempty(ind) && ~skip_sig
     disp(['no sig file for ' , h5_file]); 
     D2a=[]; PairData=[]; params=[]; TrackData=[]; return;
 end
-if ~skip_sig;
+if ~skip_sig
     sig_file=sig_file(ind(end));
 end
 try
     I=h5info([this_dir,'/',sig_file.name]);
 catch
-    disp(['bad sig file for ' , h5_file]);
     if ~skip_sig
+        disp(['bad sig file for ' , h5_file]);
         D2a=[]; PairData=[]; params=[]; return;
     end
 end
