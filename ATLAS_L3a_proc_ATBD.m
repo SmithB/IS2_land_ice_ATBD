@@ -13,7 +13,7 @@ end
 
 %-------------------------------------------------------
 
-function [D3a, dh_hist, LOG]=ATL03_to_ATL06(D2, params, which_seg, SNR_F_table)
+function [D3a, dh_hist, LOG]=ATL03_to_ATL06(D2, params, which_seg, SNR_F_table, dist_for_segment)
 
 % ATLAS_L3a_proc_ATBD(D2, params, which_L)
 % Inputs:
@@ -70,6 +70,18 @@ if isfield(D2,'elev')
         D2(k).h=D2(k).elev;
     end
 end
+if isfield(D2,'h_ph')
+    for k=1:length(D2)
+        D2(k).h=D2(k).h_ph;
+    end
+end
+if isfield(D2,'signal_conf_ph')
+    for kB=1:2
+        D2(kB).ph_class=D2(kB).signal_conf_ph; 
+    end
+    D2=rmfield(D2,'signal_conf_ph');
+end
+
 
 % NEW 10/2015: Throw away PE around gaps in the DEM
 for kB=1:2
@@ -88,11 +100,27 @@ if isempty(x_AT_range)
 end
 
 % new 11/2016: use the segment number if it exists (OTW add)
+if isfield(D2,'ph_seg_num')
+    for kB=1:2
+        D2(kB).seg_num=D2(kB).ph_seg_num;
+    end
+    D2=rmfield(D2,'ph_seg_num');
+end
+
 if ~isfield(D2,'seg_num')
     for kB=1:2
         D2(kB).seg_num=1+floor(D2(kB).x_RGT/20);
     end
 end
+
+if ~exist('dist_for_segment','var')
+    uSeg=unique(cat(1, D2.seg_num));
+
+    for kB=1:2
+         dist_for_segment{kB}=sparse(uSeg, ones(size(uSeg)), (uSeg-1)*20);
+    end
+end
+
 
 seg_list=unique(cat(1, D2.seg_num));
 
@@ -149,7 +177,7 @@ for k0=1:length(seg_list)
     ybar=NaN(1,2);
     for kB=1:2
         D3(k0, kB).segment_id=seg_list(k0);
-        [D3(k0, kB).x_RGT, x0]=deal(seg_list(k0)*20-20);
+        [D3(k0, kB).x_RGT, x0]=deal(dist_for_segment{kB}(seg_list(k0)));
         AT_els=D2(kB).seg_num==seg_list(k0)-1 | D2(kB).seg_num==seg_list(k0);
         
         if isfield(params(kB),'skip') &&  params(kB).skip
@@ -186,6 +214,7 @@ for k0=1:length(seg_list)
             end
         end
         
+        % define h_range_initial and (for cases 2 and 3) w_surface_window_initial
         h_range_initial=[NaN NaN];
         if D3(k0, kB).signal_selection_source ==2 &&  D3(k0, kB).signal_selection_status_backup ~=3  % not enough confident or padded PE have been found, fall back to alternate strategies
             [initial_fit_els, D3(k0, kB).signal_selection_source, D3(k0, kB).signal_selection_status_backup]=...
@@ -193,8 +222,13 @@ for k0=1:length(seg_list)
             D2sub(kB)=index_struct(D2sub_unfilt(kB), initial_fit_els);
             initial_fit_els=true(size(D2sub(kB).h));
             h_range_initial(kB)=diff(range(D2sub_unfilt(kB).h));
-            D3(k0, kB).w_surface_window_initial=diff(range(D2sub(kB).h));
-            D3(k0, kB).h_initial=mean(D2sub(kB).h(initial_fit_els));
+            if ~isempty(D2sub(kB).h)
+                D3(k0, kB).w_surface_window_initial=diff(range(D2sub_unfilt(kB).h(initial_fit_els)));  
+                D3(k0, kB).h_initial=mean(D2sub(kB).h);
+            else
+                D3(k0, kB).w_surface_window_initial=NaN;
+                D3(k0, kB).h_initial=NaN;
+            end
         else
             h_range_initial(kB)=D3(k0, kB).w_surface_window_initial;
         end
@@ -208,9 +242,9 @@ for k0=1:length(seg_list)
             end
             max_ground_bin_iterations=100;
             if SAVELOG
-                [D3(k0, kB), r, els, LOG(k0, kB).LS_fit]=ATLAS_LS_fit(D2sub(kB), D3(k0, kB).x_RGT, initial_fit_els, max_ground_bin_iterations, params(kB), D3(k0, kB), LS_fit_options);
+                [D3(k0, kB), r, els, LOG(k0, kB).LS_fit]=ATLAS_LS_fit(D2sub(kB), D3(k0, kB).x_RGT, initial_fit_els, D3(k0,kB).w_surface_window_initial, params(kB), D3(k0, kB), LS_fit_options);
             else
-                [D3(k0, kB), r, els]=ATLAS_LS_fit(D2sub(kB), D3(k0, kB).x_RGT, initial_fit_els, max_ground_bin_iterations, params(kB), D3(k0, kB), LS_fit_options);
+                [D3(k0, kB), r, els]=ATLAS_LS_fit(D2sub(kB), D3(k0, kB).x_RGT, initial_fit_els, D3(k0,kB).w_surface_window_initial, params(kB), D3(k0, kB), LS_fit_options);
             end
              
             if SAVELOG
@@ -284,8 +318,11 @@ for k0=1:length(seg_list)
             D3(k0, kB).track=temp(1);
             D3(k0, kB).first_seg_pulse=min(D2sub(kB).pulse_num);
             D3(k0, kB).N_seg_pulses=diff(range(D2sub(kB).pulse_num))+1;
-            D3(k0, kB).time=median(D2sub(kB).time);
-            
+            if isfield(D2sub,'time'); 
+                D3(k0, kB).time=median(D2sub(kB).time);
+            else
+                D3(k0, kB).time=median(D2sub(kB).delta_time);
+            end
             % NEW 10/2015:  Use regression to calculate reference center
             % parameters
             % regress WRT along-track distance to get parameters for segment
@@ -295,15 +332,22 @@ for k0=1:length(seg_list)
             Ginv_AT=Ginv_AT(1,:);
             %             D3(k0, kB).x_PS_ctr=Ginv_AT*D2sub(kB).x0(els);
             %             D3(k0, kB).y_PS_ctr=Ginv_AT*D2sub(kB).y0(els);
-            D3(k0, kB).lat_ctr=Ginv_AT*D2sub(kB).lat(els);
-            D3(k0, kB).lon_ctr=Ginv_AT*D2sub(kB).lon(els);
-            
+            if isfield(D2sub,'lat');
+                D3(k0, kB).lat_ctr=Ginv_AT*D2sub(kB).lat(els);
+                D3(k0, kB).lon_ctr=Ginv_AT*D2sub(kB).lon(els);
+            else
+                D3(k0, kB).lat_ctr=Ginv_AT*D2sub(kB).lat_ph(els);
+                D3(k0, kB).lon_ctr=Ginv_AT*D2sub(kB).lon_ph(els);
+            end
             
             if isnan(D3(k0, kB).h_LI)
                 D3(k0, kB).surface_height_invalid=true;
             end
-            
-            ybar(kB)=median(D2sub(kB).y_RGT);
+            if isfield(D2sub,'y_RGT');
+                ybar(kB)=median(D2sub(kB).y_RGT);
+            else
+                ybar(kB)=median(D2sub(kB).dist_ph_across);
+            end
         end
     end
     % calculate dh_fit_dy:
@@ -315,9 +359,11 @@ for k0=1:length(seg_list)
     
     if ~isfinite(dh_fit_dy); dh_fit_dy=0; end
     for kB=1:2
-        if ~isfinite(D3(k0, kB).h_mean); continue; end
+        if ~isfinite(D3(k0, kB).h_mean); continue; end        
         N_sig=max(0,D3(k0, kB).n_fit_photons-D3(k0, kB).N_noise);
         sigma_signal=sqrt((dh_fit_dy.^2+D3(k0, kB).dh_fit_dx.^2)*params(kB).sigma_x.^2 + (params(kB).sigma_pulse*1.5e8).^2);
+        
+        
         D3(k0, kB).sigma_photon_est=sqrt((D3(k0, kB).N_noise*(D3(k0, kB).w_surface_window_final*.287).^2+N_sig*sigma_signal.^2)/D3(k0, kB).n_fit_photons);
         sigma_per_photon=max(D3(k0, kB).sigma_photon_est, D3(k0, kB).h_robust_spread);
         D3(k0, kB).sigma_h_mean=D3(k0, kB).sigma_h_mean*sigma_per_photon;
@@ -391,21 +437,22 @@ end
 
 %--------------------------------------------------------------------------
 function [initial_els, w_surface_window, h_window_ctr, AT_slope]=initial_at_fit(x_AT, h, initial_els, x0, BGR, W_min, params)
+c2=3e8/2;
 
 G=[ ones(size(x_AT)), x_AT-x0];
 m=G(initial_els,:)\h(initial_els);
+h_window_ctr=m(1); AT_slope=m(2)
 r=h(:)-G*m;
-Noise_Ph_per_m=params.pulses_per_seg*BGR/(params.c/2);
+Noise_Ph_per_m=params.pulses_per_seg*BGR/c2;
+ 
 H_win=diff(range(r(initial_els)));
 sigma_r=robust_peak_width_CDF(r(initial_els), Noise_Ph_per_m*H_win, [0 H_win]-H_win/2);
-sigma_expected=sqrt((params.sigma_x*m(2)).^2+ (params.sigma_pulse*params.c/2).^2);
+sigma_expected=sqrt((params.sigma_x*m(2)).^2+ (params.sigma_pulse*c2).^2);
 w_surface_window=max(W_min, 6*max(sigma_r, sigma_expected));
-h_window_ctr=m(1); AT_slope=m(2);
-% pad the surface window if needed
-initial_els=initial_els | abs(r) < w_surface_window/2;
+initial_els= abs(r) < w_surface_window/2;
 
 %---------------------------------------------------------------------------------------
-function [D3, r0, els, LOG]=ATLAS_LS_fit(D2, L0, initial_els,  N_it, params, D3, options)
+function [D3, r0, els, LOG]=ATLAS_LS_fit(D2, L0, initial_els,  H_win, params, D3, options)
 
 if isfield(options,'SAVELOG')
     SAVELOG=true;
@@ -414,6 +461,9 @@ else
 end
 if ~exist('options','var')
     options=struct('Nsigma', 3, 'Hwin_min', 3);
+end
+if ~isfield('options','N_it');
+    options.N_it=100;
 end
 
 c2=3e8/2;
@@ -439,11 +489,13 @@ D3.N_initial=sum(els);
 if SAVELOG; LOG.G=G; end
 % iterate to reduce residuals
 Noise_Ph_per_m=diff(range(D2.pulse_num))*median(D2.BGR)/c2;
-H_win=diff(range(D2.h(els)));
+if ~exist('H_win','var')|| isempty(H_win)
+    H_win=diff(range(D2.h(els)));
+end
 
-filter_hist=false(N_it, numel(D2.h));
+filter_hist=false(options.N_it, numel(D2.h));
 
-for k=1:N_it
+for k=1:options.N_it
     m_last=m;
     m=G(els,:)\D2.h(els);
     
@@ -499,12 +551,12 @@ D3.h_rms=std(r0);
 D3.h_med=m(1)+median(r0);
 
 % NEW 10/2015: Calculate the noise estimate and the SNR
-Noise_est=H_win*Noise_Ph_per_m-length(unique(D2.pulse_num))*median(D2.BGR)/c2;
+Noise_est=H_win*Noise_Ph_per_m;%????-length(unique(D2.pulse_num))*median(D2.BGR)/c2;
 D3.SNR=(sum(els)-Noise_est)./Noise_est;
 
 % NEW 10/2015: Report the exit iteration
 D3.exit_iteration=k;
-if N_it==1
+if options.N_it==1
     D3.exit_iteration=0;
 end
 
