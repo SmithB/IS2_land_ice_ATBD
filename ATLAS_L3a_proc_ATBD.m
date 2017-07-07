@@ -211,12 +211,6 @@ for k0=1:length(seg_list)
         if D3(k0, kB).signal_selection_source <=1  % if we are using ATL03 flagged PE
             [initial_fit_els, D3(k0, kB).w_surface_window_initial, D3(k0, kB).h_initial, ~]=...
                 initial_at_fit(D2sub_unfilt(kB).x_RGT, D2sub_unfilt(kB).h, initial_fit_els, x0, median(D2sub_unfilt(kB).BGR), initial_Hwin_min, params(kB));
-            if D3(k0, kB).signal_selection_source==0 
-                D2sub(kB)=index_struct(D2sub_unfilt(kB), initial_fit_els);
-                initial_fit_els=true(sum(initial_fit_els),1);
-            else
-                D2sub(kB)=D2sub_unfilt(kB);
-            end
         end
         
         % define h_range_initial and (for cases 2 and 3) w_surface_window_initial
@@ -224,12 +218,10 @@ for k0=1:length(seg_list)
         if D3(k0, kB).signal_selection_source ==2 &&  D3(k0, kB).signal_selection_status_backup ~=3  % not enough confident or padded PE have been found, fall back to alternate strategies
             [initial_fit_els, D3(k0, kB).signal_selection_source, D3(k0, kB).signal_selection_status_backup]=...
                 backup_signal_finding_strategy(D2sub_unfilt(kB), D2(kB), seg_list(k0), 10);
-            D2sub(kB)=index_struct(D2sub_unfilt(kB), initial_fit_els);
-            initial_fit_els=true(size(D2sub(kB).h));
             h_range_initial(kB)=diff(range(D2sub_unfilt(kB).h));
-            if ~isempty(D2sub(kB).h)
+            if any(initial_fit_els)
                 D3(k0, kB).w_surface_window_initial=diff(range(D2sub_unfilt(kB).h(initial_fit_els)));  
-                D3(k0, kB).h_initial=mean(D2sub(kB).h);
+                D3(k0, kB).h_initial=mean(D2sub_unfilt(kB).h(initial_fit_els));
             else
                 D3(k0, kB).w_surface_window_initial=NaN;
                 D3(k0, kB).h_initial=NaN;
@@ -237,9 +229,7 @@ for k0=1:length(seg_list)
         else
             h_range_initial(kB)=D3(k0, kB).w_surface_window_initial;
         end
-        if SAVELOG; LOG(k0, kB).initial_fit_els=initial_fit_els; end
-        
-        
+        if SAVELOG; LOG(k0, kB).initial_fit_els=initial_fit_els; end   
         
         if D3(k0, kB).signal_selection_source<3 % go ahead if we have initial PE
             if SAVELOG
@@ -248,6 +238,15 @@ for k0=1:length(seg_list)
                 LS_fit_options=struct( 'Nsigma', 3, 'Hwin_min', 3);
             end
             max_ground_bin_iterations=100;
+            
+            % restrict the fitting to the initial els
+            if D3(k0, kB).signal_selection_source<=1
+                D2sub(kB)=index_struct(D2sub_unfilt(kB), initial_fit_els); 
+                initial_fit_els=true(sum(initial_fit_els),1);
+            else
+                D2sub(kB)=D2sub_unfilt(kB);
+            end
+            
             if SAVELOG
                 [D3(k0, kB), r, els, LOG(k0, kB).LS_fit]=ATLAS_LS_fit(D2sub(kB), D3(k0, kB).x_RGT, initial_fit_els, D3(k0,kB).w_surface_window_initial, params(kB), D3(k0, kB), LS_fit_options);
             else
@@ -401,7 +400,10 @@ for k0=1:length(seg_list)
     end
     
     if SAVELOG
-        LOG(k0, kB).D3=D3(k0, kB);
+        for kB=1:2
+            LOG(k0, kB).D3=D3(k0, kB);
+            LOG(k0, kB).D2=D2sub_unfilt(kB);
+        end
     end
     
     
