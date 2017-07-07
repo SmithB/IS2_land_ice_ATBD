@@ -179,7 +179,11 @@ for k0=1:length(seg_list)
         D3(k0, kB).segment_id=seg_list(k0);
         [D3(k0, kB).x_RGT, x0]=deal(dist_for_segment{kB}(seg_list(k0)));
         AT_els=D2(kB).seg_num==seg_list(k0)-1 | D2(kB).seg_num==seg_list(k0);
-        
+        if ~any(AT_els)
+            D3(k0, kB).N_seg_pulses=0;
+        else
+            D3(k0, kB).N_seg_pulses=diff(range(D2(kB).pulse_num(AT_els)))+1;
+        end
         if isfield(params(kB),'skip') &&  params(kB).skip
             AT_els=[];
         end
@@ -194,6 +198,7 @@ for k0=1:length(seg_list)
             continue;
         end
         D2sub_unfilt(kB)=index_struct(D2(kB), AT_els);
+        % try choosing the ground strategy
         [initial_fit_els, D3(k0, kB).signal_selection_source, D3(k0, kB).signal_selection_status_confident,  D3(k0, kB).signal_selection_status_all]=...
             choose_ground_strategy(D2sub_unfilt(kB));
  
@@ -206,7 +211,7 @@ for k0=1:length(seg_list)
         if D3(k0, kB).signal_selection_source <=1  % if we are using ATL03 flagged PE
             [initial_fit_els, D3(k0, kB).w_surface_window_initial, D3(k0, kB).h_initial, ~]=...
                 initial_at_fit(D2sub_unfilt(kB).x_RGT, D2sub_unfilt(kB).h, initial_fit_els, x0, median(D2sub_unfilt(kB).BGR), initial_Hwin_min, params(kB));
-            if D3(k0, kB).signal_selection_source==1
+            if D3(k0, kB).signal_selection_source==0 
                 D2sub(kB)=index_struct(D2sub_unfilt(kB), initial_fit_els);
                 initial_fit_els=true(sum(initial_fit_els),1);
             else
@@ -233,7 +238,9 @@ for k0=1:length(seg_list)
             h_range_initial(kB)=D3(k0, kB).w_surface_window_initial;
         end
         if SAVELOG; LOG(k0, kB).initial_fit_els=initial_fit_els; end
-                
+        
+        
+        
         if D3(k0, kB).signal_selection_source<3 % go ahead if we have initial PE
             if SAVELOG
                 LS_fit_options=struct( 'Nsigma', 3, 'Hwin_min', 3,'SAVELOG', true);
@@ -264,7 +271,7 @@ for k0=1:length(seg_list)
             if ~isfield(params,'N_channels'); [params(:).N_channels]=deal(params(:).N_det); end;
             % Changed 3/24/2016
             [D3(k0, kB).fpb_med_corr, D3(k0, kB).fpb_mean_corr, D3(k0, kB).fpb_N_corr, N_WF_corr, D3(k0, kB).fpb_med_corr_sigma, D3(k0, kB).fpb_mean_corr_sigma, minGain]=...
-                fpb_corr(t_WF, N_WF, params(kB).N_channels, 57, params(kB).t_dead,  CONSTANTS.dt_hist);
+                fpb_corr(t_WF, N_WF, params(kB).N_channels, D3(k0, kB).N_seg_pulses, params(kB).t_dead,  CONSTANTS.dt_hist);
             % check if gain correction is valid
             if minGain < 1/(2*params(kB).N_channels)
                 D3(k0, kB).fpb_correction_failed=true;
@@ -393,6 +400,11 @@ for k0=1:length(seg_list)
         dh_hist_full(kB).count(:, k0)=uint8(my_histc(r, dh_hist_full(kB).dh));
     end
     
+    if SAVELOG
+        LOG(k0, kB).D3=D3(k0, kB);
+    end
+    
+    
     if mod(k0, 250)==0
         disp([num2str(k0) ' out of ' num2str(length(seg_list))]);
         clear D3a;
@@ -441,7 +453,7 @@ c2=3e8/2;
 
 G=[ ones(size(x_AT)), x_AT-x0];
 m=G(initial_els,:)\h(initial_els);
-h_window_ctr=m(1); AT_slope=m(2)
+h_window_ctr=m(1); AT_slope=m(2);
 r=h(:)-G*m;
 Noise_Ph_per_m=params.pulses_per_seg*BGR/c2;
  
