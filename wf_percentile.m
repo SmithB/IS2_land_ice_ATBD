@@ -1,5 +1,7 @@
 function X=wf_percentile( bins, counts, P)
 
+if isempty(bins); X=NaN; return; end;
+
 bin_width=[diff(bins(:)); bins(end)-bins(end-1)];
 edges=[bins(1)-bin_width(1)/2; bins(:)+bin_width/2];
 C=[0; cumsum(counts(:))]; C=C/C(end);
