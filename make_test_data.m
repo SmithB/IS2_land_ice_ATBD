@@ -14,13 +14,13 @@ sigma0=1.6e-9*1.5e8;
 Rough0=([.25 0.5, 1, 2, 4, 8])*sigma0;
 Rsurf0=[0.0625 0.125 0.25 0.5 1];
 BGR=1e7;
-test_data_dir=['/home/ben/Dropbox/projects/IS2_ATBD/Combined_corr_test_data_May_4_2017'];
+test_data_dir=['/home/ben/Dropbox/projects/IS2_ATBD/Combined_corr_test_data_Aug_17_2017'];
 out_dir=test_data_dir;
 
 
 % read in the SNR F table:
 fields={'BGR', 'W_surface_window_initial','SNR', 'P_NoiseOnly'};
-for kf=1:length(fields); 
+for kf=1:length(fields) 
     SNR_F_table.(fields{kf})=h5read('SNR_F_table.h5', ['/',fields{kf}]); 
 end
 
@@ -98,11 +98,15 @@ for k=1:numel(Rough)
             end
         end
         
-        % delete problem parameters
-        non_atl03_parameters={'x0','zground','xground','SigNoise'};
-        for k3=1:length(non_atl03_parameters);
-            D2=rmfield(D2, non_atl03_parameters{k3});
+        for kB=1:2
+            D2(kB)=index_struct(D2(kB), D2(kB).detected);
         end
+        
+        % delete problem parameters
+        non_atl03_parameters={'x0','zground','xground','SigNoise','detected'};
+        for k3=1:length(non_atl03_parameters)
+            D2=rmfield(D2, non_atl03_parameters{k3});
+        end    
         
         write_test_file(D2_file, D2, params);
     end
@@ -122,6 +126,10 @@ for k=1:numel(Rough)
     if GETLOG
         LOGFILE=sprintf('%s/D3/Rough=%3.2e_Rsurf=%3.2e_BGR=%3.2e_LOG.mat', test_data_dir, Rough(k), Rsurf(k), BGR  );
         save(LOGFILE, 'LOG','dh_hist');
+        LOG_SAVE=strrep(LOGFILE, '.mat','.h5');
+        if exist(LOG_SAVE', 'file'); delete(LOG_SAVE); end
+        dump_struct_to_h5(LOG, LOG_SAVE,'',{'seg%d_beam%d','it_%d'});
+
     end
 end
 
@@ -172,18 +180,18 @@ function write_test_file(filename, D2,  params)
 
 beam_name={'/weak/','/strong/'};
 [f2, fp]=define_fields;
-for k=1:length(f2);
-    for beam=1:2;
-        if isfield(D2(beam),f2{k});
+for k=1:length(f2)
+    for beam=1:2
+        if isfield(D2(beam),f2{k})
             write_h5_field(filename,  D2(beam).(f2{k}), ['/photon',beam_name{beam},f2{k}]);
         else
             warning('%s is not a field of D2', f2{k});
         end
     end
 end
-for k=1:length(fp);
-    for beam=1:2;
-        if isfield(params(beam),fp{k});
+for k=1:length(fp)
+    for beam=1:2
+        if isfield(params(beam),fp{k})
             write_h5_field(filename,params(beam).(fp{k}), ['/params', beam_name{beam},fp{k}]);
         else
             warning('%s is not a field of params', fp{k});
@@ -196,12 +204,12 @@ end
 function [D2, params]=read_test_file(filename)
 beam_name={'/weak/','/strong/'};
 [f2, fp]=define_fields;
-for k=1:length(f2);
-    for beam=1:2;
+for k=1:length(f2)
+    for beam=1:2
         D2(beam).(f2{k})=h5read(filename, ['/photon', beam_name{beam},f2{k}]);
     end
 end
-for k=1:length(fp);
+for k=1:length(fp)
     for beam=1:2
         params(beam).(fp{k})=h5read(filename, ['/params', beam_name{beam},fp{k}]);
     end
@@ -215,7 +223,7 @@ if ~exist(thedir,'dir'); mkdir(thedir); end
 
 if exist(filename,'file'); delete(filename); end
 f_out=fieldnames(D3);
-for k=1:length(f_out);
+for k=1:length(f_out)
     write_h5_field(filename,D3.(f_out{k}), ['/',f_out{k}]);
 end
 
