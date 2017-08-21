@@ -3,7 +3,7 @@ IS_paths=IS_LI_paths('dh_clouds');
 
 % Define the cloud fraction PDF
 % optical thicknesses:
-Pcloud.tau={'0.0' '1.0' '2.0' '3.0' 'Nothing'};
+Pcloud.tau={'0.0' '1.0' '2.0' '3.0' '4.0'};
 % probability of clouds at each thickness:
 Pcloud.P=[24.6 37.5/2 37.5/2 37.9/2 37.9/2]/100;
 
