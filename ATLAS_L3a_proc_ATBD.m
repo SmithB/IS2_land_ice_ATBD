@@ -47,7 +47,7 @@ else
     SAVELOG=false;
 end
 
-CONSTANTS.dt_hist=100e-12;
+CONSTANTS.dt_hist=25e-12;
 CONSTANTS.c=299792458; %speed of light (m/s)
 
 if ~isfield(params,'pulses_per_seg'); for kB=1:2; params(kB).pulses_per_seg=57; end;end
@@ -63,7 +63,6 @@ if isfield(D2,'detected')
         D2(kB)=index_struct(D2(kB),D2(kB).detected==1);
     end
 end
-
 
 if isfield(D2,'elev')
     for k=1:length(D2)
@@ -180,9 +179,9 @@ for k0=1:length(seg_list)
         [D3(k0, kB).x_RGT, x0]=deal(dist_for_segment{kB}(seg_list(k0)));
         AT_els=D2(kB).seg_num==seg_list(k0)-1 | D2(kB).seg_num==seg_list(k0);
         if ~any(AT_els)
-            D3(k0, kB).N_seg_pulses=0;
+            D3(k0, kB).N_seg_pulses=40/.7;
         else
-            D3(k0, kB).N_seg_pulses=diff(range(D2(kB).pulse_num(AT_els)))+1;
+            D3(k0, kB).N_seg_pulses=max(40/.7, diff(range(D2(kB).pulse_num(AT_els)))+1);
         end
         if isfield(params(kB),'skip') &&  params(kB).skip
             AT_els=[];
@@ -197,10 +196,10 @@ for k0=1:length(seg_list)
             D3(k0, kB).signal_selection_status_backup=3;
             continue;
         end
-        D2sub_unfilt(kB)=index_struct(D2(kB), AT_els);
+        D2sub(kB)=index_struct(D2(kB), AT_els);
         % try choosing the ground strategy
         [initial_fit_els, D3(k0, kB).signal_selection_source, D3(k0, kB).signal_selection_status_confident,  D3(k0, kB).signal_selection_status_all]=...
-            choose_ground_strategy(D2sub_unfilt(kB));
+            choose_ground_strategy(D2sub(kB));
  
         if D3(k0, kB).signal_selection_source < 1  % enough confident PE found to determine slope and height of the bin
             initial_Hwin_min=3;
@@ -210,18 +209,18 @@ for k0=1:length(seg_list)
         
         if D3(k0, kB).signal_selection_source <=1  % if we are using ATL03 flagged PE
             [initial_fit_els, D3(k0, kB).w_surface_window_initial, D3(k0, kB).h_initial, ~]=...
-                initial_at_fit(D2sub_unfilt(kB).x_RGT, D2sub_unfilt(kB).h, initial_fit_els, x0, median(D2sub_unfilt(kB).BGR), initial_Hwin_min, params(kB));
+                initial_at_fit(D2sub(kB).x_RGT, D2sub(kB).h, initial_fit_els, x0, median(D2sub(kB).BGR), initial_Hwin_min, D3(k0, kB).N_seg_pulses, params(kB));
         end
         
         % define h_range_initial and (for cases 2 and 3) w_surface_window_initial
         h_range_initial=[NaN NaN];
         if D3(k0, kB).signal_selection_source ==2 &&  D3(k0, kB).signal_selection_status_backup ~=3  % not enough confident or padded PE have been found, fall back to alternate strategies
             [initial_fit_els, D3(k0, kB).signal_selection_source, D3(k0, kB).signal_selection_status_backup]=...
-                backup_signal_finding_strategy(D2sub_unfilt(kB), D2(kB), seg_list(k0), 10);
-            h_range_initial(kB)=diff(range(D2sub_unfilt(kB).h));
+                backup_signal_finding_strategy(D2sub(kB), D2(kB), seg_list(k0), 10);
+            h_range_initial(kB)=diff(range(D2sub(kB).h));
             if any(initial_fit_els)
-                D3(k0, kB).w_surface_window_initial=diff(range(D2sub_unfilt(kB).h(initial_fit_els)));  
-                D3(k0, kB).h_initial=mean(D2sub_unfilt(kB).h(initial_fit_els));
+                D3(k0, kB).w_surface_window_initial=diff(range(D2sub(kB).h(initial_fit_els)));  
+                D3(k0, kB).h_initial=mean(D2sub(kB).h(initial_fit_els));
             else
                 D3(k0, kB).w_surface_window_initial=NaN;
                 D3(k0, kB).h_initial=NaN;
@@ -232,19 +231,16 @@ for k0=1:length(seg_list)
         if SAVELOG; LOG(k0, kB).initial_fit_els=initial_fit_els; end   
         
         if D3(k0, kB).signal_selection_source<3 % go ahead if we have initial PE
+            LS_fit_options=struct( 'Nsigma', 3, 'Hwin_min', 3, 'restrict_fit_to_initial_els', false);
             if SAVELOG
-                LS_fit_options=struct( 'Nsigma', 3, 'Hwin_min', 3,'SAVELOG', true);
-            else
-                LS_fit_options=struct( 'Nsigma', 3, 'Hwin_min', 3);
+                LS_fit_options.SAVELOG=true;
             end
             max_ground_bin_iterations=100;
+            if sum(initial_fit_els) < 10; continue; end
             
             % restrict the fitting to the initial els
             if D3(k0, kB).signal_selection_source<=1
-                D2sub(kB)=index_struct(D2sub_unfilt(kB), initial_fit_els); 
-                initial_fit_els=true(sum(initial_fit_els),1);
-            else
-                D2sub(kB)=D2sub_unfilt(kB);
+                LS_fit_options.restrict_fit_to_initial_els=true;
             end
             
             if SAVELOG
@@ -267,10 +263,13 @@ for k0=1:length(seg_list)
             t_WF=((min(temp.time)-2.5*CONSTANTS.dt_hist):CONSTANTS.dt_hist:(max(temp.time)+params(kB).t_dead))';
             N_WF=my_histc(  temp.time, t_WF);
             
+            % quit if we've somehow lost photons
+            if sum(N_WF) < 10 || ~any(isfinite(N_WF)); continue; end
+            
             if ~isfield(params,'N_channels'); [params(:).N_channels]=deal(params(:).N_det); end;
             % Changed 3/24/2016
-            [D3(k0, kB).fpb_med_corr, D3(k0, kB).fpb_mean_corr, D3(k0, kB).fpb_N_corr, N_WF_corr, D3(k0, kB).fpb_med_corr_sigma, D3(k0, kB).fpb_mean_corr_sigma, minGain]=...
-                fpb_corr(t_WF, N_WF, params(kB).N_channels, D3(k0, kB).N_seg_pulses, params(kB).t_dead,  CONSTANTS.dt_hist);
+            [D3(k0, kB).fpb_med_corr, D3(k0, kB).fpb_mean_corr, D3(k0, kB).fpb_N_corr, N_WF_corr, D3(k0, kB).fpb_med_corr_sigma, D3(k0, kB).fpb_mean_corr_sigma, minGain, fpb_gain]=...
+                fpb_corr(t_WF, N_WF, params(kB).N_channels, D3(k0, kB).N_seg_pulses, params(kB).t_dead,  0.01);
             % check if gain correction is valid
             if minGain < 1/(2*params(kB).N_channels)
                 D3(k0, kB).fpb_correction_failed=true;
@@ -287,6 +286,13 @@ for k0=1:length(seg_list)
                     median(D2sub(kB).BGR)*57, max(10, sum(N_WF_corr)-D3(k0, kB).N_noise));
             else
                 D3(k0, kB).TX_med_corr=0;
+            end
+            
+            if SAVELOG
+               LOG(k0, kB).t_WF=t_WF;
+               LOG(k0, kB).N_WF=N_WF;
+               LOG(k0, kB).N_WF_corr=N_WF_corr;
+               LOG(k0, kB).gain=fpb_gain;
             end
             
             % Calculate the final h_LI
@@ -318,13 +324,13 @@ for k0=1:length(seg_list)
             else
                 D3(k0, kB).y_RGT=median(imag(D2sub(kB).x_RGT));
             end
+            % pull out the beam number
             temp=unique(D2sub(kB).beam(isfinite(D2sub(kB).beam)));
             D3(k0, kB).beam=temp(1);
             temp=unique(D2sub(kB).track(isfinite(D2sub(kB).track)));
             D3(k0, kB).track=temp(1);
             D3(k0, kB).first_seg_pulse=min(D2sub(kB).pulse_num);
-            D3(k0, kB).N_seg_pulses=diff(range(D2sub(kB).pulse_num))+1;
-            if isfield(D2sub,'time'); 
+            if isfield(D2sub,'time');
                 D3(k0, kB).time=median(D2sub(kB).time);
             else
                 D3(k0, kB).time=median(D2sub(kB).delta_time);
@@ -338,7 +344,7 @@ for k0=1:length(seg_list)
             Ginv_AT=Ginv_AT(1,:);
             %             D3(k0, kB).x_PS_ctr=Ginv_AT*D2sub(kB).x0(els);
             %             D3(k0, kB).y_PS_ctr=Ginv_AT*D2sub(kB).y0(els);
-            if isfield(D2sub,'lat');
+            if isfield(D2sub,'lat')
                 D3(k0, kB).lat_ctr=Ginv_AT*D2sub(kB).lat(els);
                 D3(k0, kB).lon_ctr=Ginv_AT*D2sub(kB).lon(els);
             else
@@ -349,7 +355,7 @@ for k0=1:length(seg_list)
             if isnan(D3(k0, kB).h_LI)
                 D3(k0, kB).surface_height_invalid=true;
             end
-            if isfield(D2sub,'y_RGT');
+            if isfield(D2sub,'y_RGT')
                 ybar(kB)=median(D2sub(kB).y_RGT);
             else
                 ybar(kB)=median(D2sub(kB).dist_ph_across);
@@ -389,8 +395,8 @@ for k0=1:length(seg_list)
     % new, 4/2016: calculate residual histogram
     for kB=1:2
         if ~isfinite(D3(k0, kB).h_mean); continue; end
-        xx=D2sub_unfilt(kB).x_RGT-D3(k0, kB).x_RGT;
-        zz=D2sub_unfilt(kB).h;
+        xx=D2sub(kB).x_RGT-D3(k0, kB).x_RGT;
+        zz=D2sub(kB).h;
         zz=zz(abs(xx)<10);  % select elements from the non-overlapping parts of the segment
         xx=xx(abs(xx)<10);
         if isempty(xx); continue; end
@@ -402,7 +408,7 @@ for k0=1:length(seg_list)
     if SAVELOG
         for kB=1:2
             LOG(k0, kB).D3=D3(k0, kB);
-            LOG(k0, kB).D2=D2sub_unfilt(kB);
+            LOG(k0, kB).D2=D2sub(kB);
         end
     end
     
@@ -450,14 +456,14 @@ for kB=1:2
 end
 
 %--------------------------------------------------------------------------
-function [initial_els, w_surface_window, h_window_ctr, AT_slope]=initial_at_fit(x_AT, h, initial_els, x0, BGR, W_min, params)
+function [initial_els, w_surface_window, h_window_ctr, AT_slope]=initial_at_fit(x_AT, h, initial_els, x0, BGR, W_min, N_pulses_in_seg, params)
 c2=3e8/2;
 
 G=[ ones(size(x_AT)), x_AT-x0];
 m=G(initial_els,:)\h(initial_els);
 h_window_ctr=m(1); AT_slope=m(2);
 r=h(:)-G*m;
-Noise_Ph_per_m=params.pulses_per_seg*BGR/c2;
+Noise_Ph_per_m=N_pulses_in_seg*BGR/c2;
  
 H_win=diff(range(r(initial_els)));
 sigma_r=robust_peak_width_CDF(r(initial_els), Noise_Ph_per_m*H_win, [0 H_win]-H_win/2);
@@ -476,9 +482,16 @@ end
 if ~exist('options','var')
     options=struct('Nsigma', 3, 'Hwin_min', 3);
 end
-if ~isfield('options','N_it');
+if ~isfield('options','N_it')
     options.N_it=100;
 end
+
+if options.restrict_fit_to_initial_els
+    selectable_els=initial_els;
+else
+    selectable_els=true(size(D2.h));
+end
+
 
 c2=3e8/2;
 if isfield(D2,'elev')
@@ -502,7 +515,7 @@ m=G(els,:)\D2.h(els);
 D3.N_initial=sum(els);
 if SAVELOG; LOG.G=G; end
 % iterate to reduce residuals
-Noise_Ph_per_m=diff(range(D2.pulse_num))*median(D2.BGR)/c2;
+Noise_Ph_per_m=D3.N_seg_pulses*median(D2.BGR)/c2;
 if ~exist('H_win','var')|| isempty(H_win)
     H_win=diff(range(D2.h(els)));
 end
@@ -524,7 +537,7 @@ for k=1:options.N_it
     H_win_last=H_win;
     
     H_win=max([2*[sigma_expected, sigma_r]*options.Nsigma, 0.75*H_win_last, options.Hwin_min]);
-    els=abs(r_all ) < H_win/2;
+    els=selectable_els & abs(r_all ) < H_win/2;
     if SAVELOG
         LOG.iterations(k).els=els;
         LOG.iterations(k).sigma_r=sigma_r;
@@ -671,7 +684,7 @@ end
 h=D2_all.h(these);
 bins=(floor(min(h))+0.25):0.5:ceil(max(h));
 count=my_histc(h, bins);
-% lazy programming: the count for bin +-W is found by convolving with a
+% lazy programming: the count for bin +-W/2 on an 0.5 m grid is found by convolving with a
 % boxcar 2W high
 C1=conv(count(:), ones(2*W, 1),'same');
 
@@ -703,7 +716,13 @@ if sum(selected_PE) < 10
     end
 end
 
+%---------------------------------------------------------------
+function flag=calc_ATL06_summary_flag(D3)
 
+flag=~(D3.h_robust_spread<1 &...
+    D3.signal_selection_source <=1 & ...
+    D3.h_LI_sigma < 1 & ...
+    D3.SNR_significance < 0.02);
 
 
 
