@@ -42,7 +42,7 @@ last_gain=ones(size(N_corr));
 gain=zeros(size(N_corr));
 
 % iterate the solution until the gain converges
-while max(abs(last_gain-gain)) > 0.001 && iteration < 20;
+while max(abs(last_gain-gain)) > 0.001 && iteration < 20
     iteration=iteration+1;
     last_gain=gain;
     %for iteration=1:10;
