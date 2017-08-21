@@ -2,6 +2,13 @@
 run_type='dh_clouds';
 
 
+% read in the SNR F table:
+fields={'BGR', 'W_surface_window_initial','SNR', 'P_NoiseOnly'};
+for kf=1:length(fields)
+    SNR_F_table.(fields{kf})=h5read('SNR_F_table.h5', ['/',fields{kf}]);
+end
+
+
 % setup the path defaults
 IS_paths=IS_LI_paths('dh_clouds');
 
@@ -42,52 +49,47 @@ if false
 end
 
 load WF_est
-tau_list={'0.0','1.0','2.0','3.0'};tau_list=tau_list(end:-1:1);
+%tau_list={'0.0','1.0','2.0','3.0','4.0'};
+%tau_list={'2.0' };
+
+PairTrackCombos=load('/Volumes/ice1/ben/sdt/ATLxx_example/PIG_pairtrack_list');
+
 badlist={};
 for k_tau=length(tau_list):-1:1
-    top_dir=sprintf(['%s/tau=%s/'],IS_paths.ATL03,  tau_list{k_tau});
+    top_dir=sprintf('%s_8.00MHz/tau=%s/',IS_paths.ATL03,  tau_list{k_tau});
      
-    d_rep=dir([top_dir,'/rep_*']);
-    for k_rep=1:length(d_rep);
-        rep_dir=[top_dir,'/', d_rep(k_rep).name];
+    %d_rep=dir([top_dir,'/rep_*']);
+    
+    for k_rep=1:length(rep_list)
+        rep_dir=sprintf('%s/rep_%d/', top_dir, rep_list(k_rep));
+        %rep_dir=[top_dir,'/', d_rep(k_rep).name];
         %        d_TP=[dir([rep_dir,'/*.mat']);dir([rep_dir,'/*D2.h5'])];
-        d_TP=[dir([rep_dir,'/*.mat']);dir([rep_dir,'/*Track_*D2.h5'])];
-        for k_TP=1:length(d_TP);
-            out_dir=strrep(rep_dir,'ATL03','ATL06');
-            in_file=[rep_dir,'/', d_TP(k_TP).name];
+        %d_TP=[dir([rep_dir,'/*.mat']);dir([rep_dir,'/*Track_*D2.h5'])];
+        for TP_list_ind=1:length(TP_list)
+            k_TP=TP_list(TP_list_ind);
+            in_file=sprintf('%s/Track_%d-Pair_%d_D2.h5', rep_dir, PairTrackCombos.track(k_TP),  PairTrackCombos.pair(k_TP));
+            if ~exist(in_file,'file'); continue; end
+            out_dir=strrep(rep_dir,'ATL03','ATL06');       
             out_file=strrep(in_file,'ATL03','ATL06');
             out_file=strrep(out_file, 'D2.h5','D3.h5');
-            
-            % run only on files in a short list appropriate for the current
-            % subset
-            if exist('top_level_params','var') && isfield(top_level_params,'files');
-                [~, thebase]=fileparts(out_file);
-                if ~ismember(thebase, top_level_params.files);
-                    continue; 
-                end
-            end
-            
-            if ~exist(out_dir,'dir');
+
+            if ~exist(out_dir,'dir')
                 mkdir(out_dir);
             end
             if exist(out_file,'file'); continue; end
-            status=lockfile_tool('lock', out_file);
-            if status~=0
+            fprintf(1, 'processing %s\n\tto \t%s\n', in_file, out_file);
+            sig_file=dir([in_file,'*sigparms.h5']);
+            sigfinder_failed=false;
+            if isempty(sig_file)
+                sigfinder_failed=true;
+            end
+            if sigfinder_failed
                 continue
             end
             
-            fprintf(1, 'processing %s\n\tto \t%s\n', in_file, out_file);
             [D2a, PairData, params, TrackData]=read_ATLAS_h5_D2a(in_file);
-            
-            if exist('top_level_params','var') && isfield(top_level_params,'XR');
-                for kB=1:2;
-                    [xx,yy]=ll2ps(D2a(kB).lat, D2a(kB).lon);
-                    D2a(kB)=index_struct(D2a(kB), xx > top_level_params.XR(1) & xx < top_level_params.XR(2) & yy > top_level_params.YR(1) & yy < top_level_params.YR(2));
-                end         
-            end
-                
-                
-            if isempty(D2a);
+        
+            if isempty(D2a)
                 continue;
             end    
             
@@ -98,14 +100,14 @@ for k_tau=length(tau_list):-1:1
             end
              
             for k=1:2;
-                params(k).cycle=k_rep;
+                params(k).cycle=rep_list(k_rep);
                 params(k).RGT=median(PairData.track);
                 params(k).PT=median(PairData.pair);
                 params(k).GT=2*(params(k).PT-1)+k;
                 params(k).orbit_number=(params(k).cycle-1)*1387+params(k).RGT;
                 params(k).ATL03_sig_find=true;
             end
-            [D3, dh_hist]=ATLAS_L3a_proc_ATBD(D2a,  params);
+            [D3, dh_hist]=ATLAS_L3a_proc_ATBD(D2a,  params, [], SNR_F_table);
             if isempty(D3); continue; end
             
             if ~isfield(PairData,'xy');
@@ -114,7 +116,7 @@ for k_tau=length(tau_list):-1:1
              
             write_ATL06_h5(D3, dh_hist, out_file);
             %save(out_file,'D3');
-            lockfile_tool('unlock', out_file);
+            %lockfile_tool('unlock', out_file);
         end
     end
 end
