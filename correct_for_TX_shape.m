@@ -1,4 +1,4 @@
-function [dM, dCtr]=correct_for_TX_shape(t, z, t_TX, TX, HW, Nrate, N_sig)
+function [dM, dCtr, syn_wf]=correct_for_TX_shape(t, z, t_TX, TX, HW, Nrate, N_sig)
 
 if ~isempty(z);
     if exist('Nrate','var') & Nrate>0
@@ -48,7 +48,7 @@ if exist('Nrate', 'var')
     % iterate to find the centroid
     last_t_ctr=t1(1);
     t_ctr=LCH(2);
-    while abs(t_ctr-last_t_ctr) > 1e-3/1.5e8;
+    while abs(t_ctr-last_t_ctr) > 1e-3/1.5e8
         els=abs(t1-t_ctr)<HW/2;
         last_t_ctr=t_ctr;
         t_ctr=sum(TX_WF_broadened(els).*t1(els))/sum(TX_WF_broadened(els));
@@ -61,6 +61,7 @@ else
     %find the mean of the RX waveform (edited by twice the window)
     %TXBm0=wf_percentile(t1(TXB_els), TX_WF_broadened(TXB_els), 0.5);
     TXBm0=sum(t1(TXB_els).*TX_WF_broadened(TXB_els))./sum(TX_WF_broadened(TXB_els));
+    els=TXB_els;
 end
 
 %truncate the synthetic WF around its edited mean by HW
@@ -71,7 +72,10 @@ TXBm=wf_percentile(t1(TXB_els_HW), TX_WF_broadened(TXB_els_HW), 0.5);
 TimeToH=1.5e8;
 dM=TXBm*TimeToH;
 dCtr=sum(t1(TXB_els_HW).*TX_WF_broadened(TXB_els_HW))./sum(TX_WF_broadened(TXB_els_HW))*TimeToH;
- 
+
+if nargout>2
+    syn_wf=struct('t', t1,'P', TX_WF_broadened, 'mask', els);
+end
 
 
 % N.B.  Could do this with a LUT as a function of SNR, pulse width, and
