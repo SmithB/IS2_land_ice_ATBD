@@ -235,7 +235,7 @@ for k0=1:length(seg_list)
             if SAVELOG
                 LS_fit_options.SAVELOG=true;
             end
-            max_ground_bin_iterations=100;
+            max_ground_bin_iterations=25;
             if sum(initial_fit_els) < 10; continue; end
             
             % restrict the fitting to the initial els
@@ -282,7 +282,7 @@ for k0=1:length(seg_list)
             %sigma_hat_robust=robust_peak_width_from_hist(t_WF, N_WF_corr, D3(k0, kB).N_noise, D3(k0, kB).w_surface_window_final*[-0.5 0.5]/(CONSTANTS.c/2));
             %[D3(k0, kB).TX_med_corr, D3(k0, kB).TX_mean_corr]=correct_for_TX_shape(sigma_hat_robust,[],  params(kB).WF.t, params(kB).WF.p, D3(k0, kB).w_surface_window_final/(1.5e8));
             if isfield(params(kB),'WF')
-                [D3(k0, kB).TX_med_corr, D3(k0, kB).TX_mean_corr]=correct_for_TX_shape(t_WF, N_WF_corr, params(kB).WF.t, params(kB).WF.p, D3(k0, kB).w_surface_window_final/(1.5e8),...
+                [D3(k0, kB).TX_med_corr, D3(k0, kB).TX_mean_corr, syn_WF]=correct_for_TX_shape(t_WF, N_WF_corr, params(kB).WF.t, params(kB).WF.p, D3(k0, kB).w_surface_window_final/(1.5e8),...
                     median(D2sub(kB).BGR)*57, max(10, sum(N_WF_corr)-D3(k0, kB).N_noise));
             else
                 D3(k0, kB).TX_med_corr=0;
@@ -293,6 +293,11 @@ for k0=1:length(seg_list)
                LOG(k0, kB).N_WF=N_WF;
                LOG(k0, kB).N_WF_corr=N_WF_corr;
                LOG(k0, kB).gain=fpb_gain;
+               if exist('syn_WF','var');
+                   LOG(k0, kB).syn_WF_T=syn_WF.t;
+                   LOG(k0, kB).syn_WF_P=syn_WF.P;
+                   LOG(k0, kB).syn_WF_mask=syn_WF.mask;
+               end
             end
             
             % Calculate the final h_LI
@@ -558,10 +563,10 @@ for k=1:options.N_it
         break
     end
  
-    %check if we've tested this collection of elements before
-    if any(all(els(:)'==filter_hist(1:k,:),2));
-        break
-    end
+%     %check if we've tested this collection of elements before
+%     if any(all(els(:)'==filter_hist(1:k,:),2));
+%         break
+%     end
 end
 
 % plotting command:
