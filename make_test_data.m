@@ -14,7 +14,7 @@ sigma0=1.6e-9*1.5e8;
 Rough0=([.25 0.5, 1, 2, 4, 8])*sigma0;
 Rsurf0=[0.0625 0.125 0.25 0.5 1];
 BGR=1e7;
-test_data_dir=['/home/ben/Dropbox/projects/IS2_ATBD/Combined_corr_test_data_Aug_17_2017'];
+test_data_dir=['/home/ben/Dropbox/projects/IS2_ATBD/Combined_corr_test_data_Aug_30_2017'];
 out_dir=test_data_dir;
 
 
