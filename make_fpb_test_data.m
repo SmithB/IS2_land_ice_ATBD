@@ -18,7 +18,7 @@ WF.p=gaussian(WF.t, 0, sigma0/c2);
 Rough0=([ 0 1, 2, 4, 8])*sigma0;
 Rsurf0=[0.25 0.5  0.75 1];
 BGR=0;%1e7;
-test_data_dir=['/home/ben/Dropbox/projects/IS2_ATBD/deadtime_correction_data/Sep_7_2017'];
+test_data_dir=['/home/ben/Dropbox/projects/IS2_ATBD/deadtime_correction_data/Sep_6_2017'];
 out_dir=test_data_dir;
  
 N_chan=[4 16];
@@ -44,11 +44,7 @@ for k=1:numel(Rough)
     if exist(D2_file,'file')
         [D2, params]=read_test_file(D2_file);
         for beam=1:2; params(beam).WF=WF;end
-        if GETLOG
-            for beam=1:2
-                params(beam).SAVELOG=true;
-            end
-        end
+        
     else
         clear D2 params;
         for beam=1:2
@@ -87,6 +83,7 @@ for k=1:numel(Rough)
     for k0=1:max(D2(2).segment_number)-1
         for kB=1:2
             these=D2(kB).segment_number==k0 | D2(kB).segment_number==k0+1;
+            tt_all=D2(kB).t_ph(these);
             tt=D2(kB).t_ph(these & D2(kB).detected);
             % do an iterative trim on these photons (b/c fpb_corr is
             % tested on trimmed distributions;
@@ -101,14 +98,18 @@ for k=1:numel(Rough)
                 it_count=it_count+1;
             end
             
-            counts=my_histc(tt(ind)-tbar, t_WF_full);
+            D3.N_true(k0, kB)=sum(abs(tt_all-tbar)<3*sigma);
+            D3.N_uncorr(k0,kB)=sum(ind);
+            
+            uncorrected_counts=my_histc(tt(ind)-tbar, t_WF_full);
             [med, centroid, count, N_fpb_corr, sigma_med, sigma_centroid, minGain, gain_full]=...
-                fpb_corr(t_WF_full, counts,  params(kB).N_channels, 58, params(kB).t_dead, signal_threshold_for_gain_corr);
+                fpb_corr(t_WF_full, uncorrected_counts,  params(kB).N_channels, 58, params(kB).t_dead, signal_threshold_for_gain_corr);
             D3.mean_uncorr(k0, kB)=tbar*(-c2);
             D3.med_uncorr(k0, kB)=median(tt(ind))*(-c2);
             D3.fpb_med_corr(k0, kB)=med;
             D3.fpb_mean_corr(k0, kB)=centroid;
-            D3.count(:, k0, kB)=counts;
+            D3.count_uncorrected(:, k0, kB)=uncorrected_counts;
+            D3.N_corrected(k0, kB)=sum(N_fpb_corr);
             D3.count_FPB_corr(:,k0, kB)=N_fpb_corr;
             D3.fpb_sigma_med(k0, kB)=sigma_med;
             D3.fpb_sigma_mean(k0, kB)=sigma_centroid;
@@ -116,11 +117,9 @@ for k=1:numel(Rough)
             D3.pulse_0(k0, kB)=min(D2(kB).pulse_num);
             D3.pulse_1(k0, kB)=max(D2(kB).pulse_num);
         end
-        
-        D3_file=strrep(D2_file,'D2','D3');
-        write_struct_to_h5_file(D3_file, D3);
     end
-        
+    D3_file=strrep(D2_file,'D2','D3');
+    write_struct_to_h5_file(D3_file, D3);
 end
 
 
