@@ -1,7 +1,7 @@
 function [med, centroid, count, N_fpb_corr, sigma_med, sigma_centroid, minGain, gain_full]=fpb_corr(t_WF_full, counts,  N_chan, N_pulses, t_dead, signal_threshold_for_gain_corr)
 c=3e8;
 
-if ~exist('signal_threshold_for_gain_corr','var');
+if ~exist('signal_threshold_for_gain_corr','var')
     signal_threshold_for_gain_corr=0.02;  % PE/dead time/channel/pulse.  At 10 MHz noise, get .00267, so threshold of .01 is between 2 and 3 sigma
 end
 
@@ -24,7 +24,7 @@ if ~any(N_per_dt>signal_threshold_for_gain_corr)
     gain_full=ones(size(N0_full));
      
     N_fpb_corr=N0_full./gain_full*N_pulses*N_chan;
-    [med, centroid, count, sigma_med, sigma_centroid]=calc_stats(N0_full*N_pulses*N_chan, gain_full, t_WF_full*(-1.5e8) );
+    [med, centroid, count, sigma_med, sigma_centroid]=calc_stats(N0_full(:)*N_pulses*N_chan, gain_full(:), t_WF_full(:)*(-1.5e8) );
     minGain=1;
     return
 end
@@ -64,7 +64,7 @@ if minGain < 0.1;
      return
 end
 
-[med, centroid, count, sigma_med, sigma_centroid]=calc_stats(N0_full, gain_full, t_WF_full*(-1.5e8) );
+[med, centroid, count, sigma_med, sigma_centroid]=calc_stats(N0_full(:), gain_full(:), t_WF_full(:)*(-1.5e8) );
 
 %----------------------------------------------------
 function [med, centroid, N, sigma_med, sigma_centroid]=calc_stats(WF, gain, t_WF)
@@ -75,7 +75,7 @@ if all(WF==0);
 end
 
 WFc=WF(:)./gain(:);
-centroid=sum(t_WF.*WFc)./sum(WFc);
+centroid=sum(t_WF(:).*WFc(:))./sum(WFc(:));
 N=sum(WF./gain);
 
 t_40_50_60=percentile_of_histogram([0.4 0.5 0.6], t_WF, WF./gain);
