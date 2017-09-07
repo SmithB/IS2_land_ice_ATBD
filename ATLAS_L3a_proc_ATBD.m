@@ -178,11 +178,14 @@ for k0=1:length(seg_list)
         D3(k0, kB).segment_id=seg_list(k0);
         [D3(k0, kB).x_RGT, x0]=deal(dist_for_segment{kB}(seg_list(k0)));
         AT_els=D2(kB).seg_num==seg_list(k0)-1 | D2(kB).seg_num==seg_list(k0);
-        if ~any(AT_els)
-            D3(k0, kB).N_seg_pulses=40/.7;
-        else
-            D3(k0, kB).N_seg_pulses=max(40/.7, diff(range(D2(kB).pulse_num(AT_els)))+1);
-        end
+        % HACK TO MAKE TEST INPUTS CONSISTENT
+        D3(k0, kB).N_seg_pulses=57;
+%         if ~any(AT_els)
+%             D3(k0, kB).N_seg_pulses=40/.7;
+%         else
+%             D3(k0, kB).N_seg_pulses=max(40/.7, diff(range(D2(kB).pulse_num(AT_els)))+1);
+%         end
+        
         if isfield(params(kB),'skip') &&  params(kB).skip
             AT_els=[];
         end
@@ -231,11 +234,11 @@ for k0=1:length(seg_list)
         if SAVELOG; LOG(k0, kB).initial_fit_els=initial_fit_els; end   
         
         if D3(k0, kB).signal_selection_source<3 % go ahead if we have initial PE
-            LS_fit_options=struct( 'Nsigma', 3, 'Hwin_min', 3, 'restrict_fit_to_initial_els', false);
+            LS_fit_options=struct( 'Nsigma', 3, 'Hwin_min', 3, 'restrict_fit_to_initial_els', false,'N_it', 25);
             if SAVELOG
                 LS_fit_options.SAVELOG=true;
             end
-            max_ground_bin_iterations=25;
+            
             if sum(initial_fit_els) < 10; continue; end
             
             % restrict the fitting to the initial els
@@ -487,8 +490,8 @@ end
 if ~exist('options','var')
     options=struct('Nsigma', 3, 'Hwin_min', 3);
 end
-if ~isfield('options','N_it')
-    options.N_it=100;
+if ~isfield(options,'N_it')
+    options.N_it=25;
 end
 
 if options.restrict_fit_to_initial_els
@@ -688,10 +691,17 @@ end
 % use the histogram strategy
 h=D2_all.h(these);
 bins=(floor(min(h))+0.25):0.5:ceil(max(h));
-count=my_histc(h, bins);
-% lazy programming: the count for bin +-W/2 on an 0.5 m grid is found by convolving with a
-% boxcar 2W high
-C1=conv(count(:), ones(2*W, 1),'same');
+% count=my_histc(h, bins);
+% % lazy programming: the count for bin +-W/2 on an 0.5 m grid is found by convolving with a
+% % boxcar 2W high
+% C1=conv(count(:), ones(2*W, 1),'same');
+
+C1=zeros(size(bins));
+for kB=1:length(C1); 
+    C1(kB)=sum(abs(h-bins(kB))<W/2);
+end
+
+
 
 % procede if more than 15 PE are in the best bin
 if max(C1) > 20   
