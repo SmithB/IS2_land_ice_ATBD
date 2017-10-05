@@ -20,7 +20,7 @@ function [D3a, dh_hist, LOG]=ATL03_to_ATL06(D2, params, which_seg, SNR_F_table, 
 % D2: a 2-element structure array containing two beams worth of L2b
 %    ICESat-2 data
 %    must contain, at minimum, fields:
-%        x_RGT: along-track coordinate
+%        x_RGT: along-track coordinate WRT the reference ground track
 %        h: surface height
 %        detected: whether each photon was detected (set to all true if no
 %        detector model used
@@ -272,7 +272,7 @@ for k0=1:length(seg_list)
             if ~isfield(params,'N_channels'); [params(:).N_channels]=deal(params(:).N_det); end;
             % Changed 3/24/2016
             [D3(k0, kB).fpb_med_corr, D3(k0, kB).fpb_mean_corr, D3(k0, kB).fpb_N_corr, N_WF_corr, D3(k0, kB).fpb_med_corr_sigma, D3(k0, kB).fpb_mean_corr_sigma, minGain, fpb_gain]=...
-                fpb_corr(t_WF, N_WF, params(kB).N_channels, D3(k0, kB).N_seg_pulses, params(kB).t_dead,  0.01);
+                fpb_corr(t_WF, N_WF, params(kB).N_channels, D3(k0, kB).N_seg_pulses, params(kB).t_dead,  0.01, CONSTANTS.dt_hist);
             % check if gain correction is valid
             if minGain < 1/(2*params(kB).N_channels)
                 D3(k0, kB).fpb_correction_failed=true;
@@ -285,8 +285,8 @@ for k0=1:length(seg_list)
             %sigma_hat_robust=robust_peak_width_from_hist(t_WF, N_WF_corr, D3(k0, kB).N_noise, D3(k0, kB).w_surface_window_final*[-0.5 0.5]/(CONSTANTS.c/2));
             %[D3(k0, kB).TX_med_corr, D3(k0, kB).TX_mean_corr]=correct_for_TX_shape(sigma_hat_robust,[],  params(kB).WF.t, params(kB).WF.p, D3(k0, kB).w_surface_window_final/(1.5e8));
             if isfield(params(kB),'WF')
-                [D3(k0, kB).TX_med_corr, D3(k0, kB).TX_mean_corr, syn_WF]=correct_for_TX_shape(t_WF, N_WF_corr, params(kB).WF.t, params(kB).WF.p, D3(k0, kB).w_surface_window_final/(1.5e8),...
-                    median(D2sub(kB).BGR)*57, max(10, sum(N_WF_corr)-D3(k0, kB).N_noise));
+                [D3(k0, kB).TX_med_corr, D3(k0, kB).TX_mean_corr, syn_WF]=correct_for_TX_shape(params(kB).WF.t, params(kB).WF.p, D3(k0, kB).w_surface_window_final/(1.5e8),...
+                    D3(k0, kB).h_robust_spread/1.5e8, D3(k0, kB).SNR);
             else
                 D3(k0, kB).TX_med_corr=0;
             end
@@ -338,7 +338,7 @@ for k0=1:length(seg_list)
             temp=unique(D2sub(kB).track(isfinite(D2sub(kB).track)));
             D3(k0, kB).track=temp(1);
             D3(k0, kB).first_seg_pulse=min(D2sub(kB).pulse_num);
-            if isfield(D2sub,'time');
+            if isfield(D2sub,'time')
                 D3(k0, kB).time=median(D2sub(kB).time);
             else
                 D3(k0, kB).time=median(D2sub(kB).delta_time);
