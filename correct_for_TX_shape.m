@@ -1,14 +1,15 @@
-function [dM, dCtr, syn_wf]=correct_for_TX_shape(t, z, t_TX, TX, HW, Nrate, N_sig)
+function [dM, dCtr, syn_wf]=correct_for_TX_shape( t_TX, TX, HW, sigma_rx, SNR)
 
-if ~isempty(z);
-    if exist('Nrate','var') & Nrate>0
-        sigma_rx=robust_peak_width_from_hist(t, z, Nrate*diff(range(t)));
-    else
-        sigma_rx=(wf_percentile(t, z, 0.84)-wf_percentile(t, z, 0.16))/2;
-    end
-else
-    sigma_rx=t;
-end
+% inputs:
+% t_tx : Time scale for the transmit pulse
+% TX: power for the transmit pulse
+% HW: height of the window, in same units as t_tx
+% sigma_rx: width of the rx pulse (same units as t_tx)
+% SNR: signal-to-noise rate within the RX window
+
+% returns: dM, dCtr: height offsets of the median and mean of the rx pulse
+% WRT the centroid of the TX pulse.  Add these to the uncorrected mean and
+% median heights
 
 sigma_tx=(wf_percentile(t_TX, TX, 0.84)-wf_percentile(t_TX, TX, 0.16))/2;
 dt=t_TX(2)-t_TX(1);
@@ -29,26 +30,27 @@ TX_WF_broadened=conv(TX(:), G(:));
 % find the 16th and 84th percentiles of the broadened WF, use these to truncate it
 LCH=wf_percentile(t1, TX_WF_broadened, [0.16 0.5 0.84]);
 
-if exist('Nrate', 'var')
+if exist('SNR', 'var')
     N_add_early=ceil((1.25*HW/2-(LCH(2)-t1(1)))/dt);
-    if N_add_early > 0;
+    if N_add_early > 0
         % add samples to the front of the WF
         t1=[t1(1)+(-N_add_early:-1)'*dt ; t1];
         TX_WF_broadened=[zeros(N_add_early,1); TX_WF_broadened];
     end
     N_add_late=ceil((1.25*HW/2-(t1(end)-LCH(2)))/dt);
-    if N_add_late > 0;
+    if N_add_late > 0
         % add samples to the front of the WF
         t1=[t1; t1(end)+(1:N_add_late)'*dt ];
         TX_WF_broadened=[TX_WF_broadened; zeros(N_add_late,1)  ];
     end
        
-    TX_WF_broadened=N_sig*TX_WF_broadened/sum(TX_WF_broadened)+Nrate*dt;
+    TX_WF_broadened=TX_WF_broadened/sum(TX_WF_broadened)+1/SNR/(HW/dt);
 
     % iterate to find the centroid
     last_t_ctr=t1(1);
+    % begin centered on the median
     t_ctr=LCH(2);
-    while abs(t_ctr-last_t_ctr) > 1e-3/1.5e8
+    while abs(t_ctr-last_t_ctr) > 1e-4/1.5e8
         els=abs(t1-t_ctr)<HW/2;
         last_t_ctr=t_ctr;
         t_ctr=sum(TX_WF_broadened(els).*t1(els))/sum(TX_WF_broadened(els));
@@ -74,37 +76,38 @@ dM=TXBm*TimeToH;
 dCtr=sum(t1(TXB_els_HW).*TX_WF_broadened(TXB_els_HW))./sum(TX_WF_broadened(TXB_els_HW))*TimeToH;
 
 if nargout>2
-    syn_wf=struct('t', t1,'P', TX_WF_broadened, 'mask', els);
+    syn_wf=struct('t', t1,'P', TX_WF_broadened, 'mask', TXB_els_HW);
 end
 
 
 % N.B.  Could do this with a LUT as a function of SNR, pulse width, and
 % window size.  Would have to be regenerated for each new WF estimate
 if 0
-    load ATLxx_example/WF_est;
+    load WF_est;
     sigma_0=0.5*diff(wf_percentile(WF.t, WF.p, [0.16 0.84]));
-    HW_vals=1.5e8*sigma_0+([0:.1:1, 1.1:.2:3, 3.5:.5:20]);
+    W_pulse=sigma_0*1.5e8+[0 0.025 0.05:.05:2];
+    
+    HW_vals=3+([0:0.1:1, 2:18]);
  
-    SNR_vals=logspace(1, 3, 50);
+    SNR_vals=logspace(0, 3, 16);
     
     % the minimum SNR is 10 PE /( 10 MHz * 20 m /1.5e8 m/s * 57 pulses) =
     % 1.3
     
     % need a quick test of robust_peak_width_from_hist
     
-    
-    % set Nrate to 1e6 * 57
-    Nrate=57e6;
-    HW=2*sigma0;
-    
-    
-    for kSig=1:length(SNR_vals);
-        for kHW=1:length(HW_vals);
-            this_SNR=SNR_vals(kSig);
-            % set the signal strength to Nrate*SNR*(HW/1.5e8)
-            N_sig=this_HW/1.5e8*Nrate*this_SNR;
-            [dM, dCtr]=correct_for_TX_shape(t, z, WF.t, WF.p, HW, Nrate, N_sig); 
+    %SNR_vals=500;
+    for kWp=1:length(W_pulse)
+        for kHW=1:length(HW_vals)
+            for kSNR=1:length(SNR_vals)
+                 [dM(kWp,  kHW, kSNR), dCtr(kWp, kHW, kSNR)]=correct_for_TX_shape(WF.t, WF.p, HW_vals(kHW)/1.5e8,  W_pulse(kWp)/1.5e8, SNR_vals(kSNR));
+            end
         end
     end
+    TX_shape_corr_table.W_pulse=W_pulse; 
+    TX_shape_corr_table.SNR=SNR_vals; 
+    TX_shape_corr_table.HW=HW_vals;
+    TX_shape_corr_table.delta_med=dM; 
+    TX_shape_corr_table.delta_mean=dCtr
 end
 
