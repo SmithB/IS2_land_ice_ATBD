@@ -72,7 +72,7 @@ function D=sub_sim(DEM, x0, params, ATM_xmit)
 D0=struct('xground',[],'pulse_num', [], 'x0', [],'SigNoise', [], 'z0', []);
 for k=1:length(x0);
     % Poisson-distributed N
-    N_sig=round(poisson_rv(params.N_per_pulse*ATM_xmit(k), 1));  
+    N_sig=poisson_random_samp(params.N_per_pulse*ATM_xmit(k));  
     % random footprint location
     D0(k).xground=x0(k)+(randn(N_sig,1)+1i*randn(N_sig,1))*params.sigma_x;    
     D0(k).pulse_num=k+zeros(N_sig,1);
@@ -80,7 +80,7 @@ for k=1:length(x0);
     D0(k).SigNoise=true(N_sig,1);
     
     N_noise=params.NoiseRate*params.H_window/(params.c/2);
-    NoiseCount=round(poisson_rv(N_noise,1));
+    NoiseCount=poisson_random_samp(N_noise);
     if NoiseCount>0;
         D0(k).xground=[D0(k).xground; x0(k)+zeros(NoiseCount,1)];
         D0(k).pulse_num=[D0(k).pulse_num; k+zeros(NoiseCount,1)];
