@@ -8,7 +8,7 @@ C=[0; cumsum(counts(:))]; C=C/C(end);
 for k=1:length(P)
     % check if any C are equal to P(k)
     eq_els=abs(C-P(k)) < 100*eps;
-    if any(eq_els);
+    if any(eq_els)
         X(k)=mean(edges(eq_els));
         continue
     end
