@@ -12,18 +12,15 @@ else
 end
 
 %-------------------------------------------------------
-
 function [D3a, dh_hist, LOG]=ATL03_to_ATL06(D2, params, which_seg, SNR_F_table, dist_for_segment)
 
-% ATLAS_L3a_proc_ATBD(D2, params, which_L)
+% ATLAS_L3a_proc_ATBD(D2, params, which_seg)
 % Inputs:
 % D2: a 2-element structure array containing two beams worth of L2b
 %    ICESat-2 data
 %    must contain, at minimum, fields:
 %        x_RGT: along-track coordinate WRT the reference ground track
 %        h: surface height
-%        detected: whether each photon was detected (set to all true if no
-%        detector model used
 %         ...probably others...
 % params: a 2-element (one per beam structure containing metadata
 %    about the D2 data and the L2->L3 processing
@@ -39,7 +36,11 @@ function [D3a, dh_hist, LOG]=ATL03_to_ATL06(D2, params, which_seg, SNR_F_table, 
 %    If specified, only the segment centered on which_L will be processed.
 %    This is useful for plotting and debugging, can be ignored for batch
 %    processing.
-
+% SNR_F_table: a look-up table giving the probability that a segment with
+%     the observed SNR would be found for a given background rate and
+%     initial window size
+% dist_for_segment:  a sparse array giving the along-track distance for the
+%     segment_id numbers in the input file
 
 if isfield(params(1),'SAVELOG') && params(1).SAVELOG
     SAVELOG=true;
@@ -47,8 +48,13 @@ else
     SAVELOG=false;
 end
 
-CONSTANTS.dt_hist=25e-12;
+CONSTANTS.dt_hist=5e-12;
 CONSTANTS.c=299792458; %speed of light (m/s)
+
+for kB=1:2
+    tt=min(params(kB).WF.t):CONSTANTS.dt_hist:max(params(kB).WF.t);
+    params(kB).WF=struct('t', tt, 'p', interp1(params(kB).WF.t, params(kB).WF.p, tt));
+end
 
 if ~isfield(params,'pulses_per_seg'); for kB=1:2; params(kB).pulses_per_seg=57; end;end
 
@@ -57,37 +63,25 @@ if ~isfield(params,'sigma_pulse')
         params(k).sigma_pulse=diff(wf_percentile(params(k).WF.t, params(k).WF.p, [0.16 .84]))/2;
     end
 end
+
+% in some processing schemes, detected and undetected photons are provided,
+% and some are marked as undetected.
 if isfield(D2,'detected')
-    D2_including_undetected=D2;
     for kB=1:2
         D2(kB)=index_struct(D2(kB),D2(kB).detected==1);
     end
 end
 
-if isfield(D2,'elev')
-    for k=1:length(D2)
-        D2(k).h=D2(k).elev;
-    end
-end
-if isfield(D2,'h_ph')
-    for k=1:length(D2)
-        D2(k).h=D2(k).h_ph;
-    end
-end
-if isfield(D2,'signal_conf_ph')
-    for kB=1:2
-        D2(kB).ph_class=D2(kB).signal_conf_ph; 
-    end
-    D2=rmfield(D2,'signal_conf_ph');
-end
+% removed conversion from D2.h_ph and D2.elev to D2.h (must use h_ph)
 
+% removed conversion from ph_class to signal_conf_ph
 
 % NEW 10/2015: Throw away PE around gaps in the DEM
 for kB=1:2
     if isfield(D2(kB),'z0')
-        D2(kB)=index_struct(D2(kB), isfinite(D2(kB).h) & isfinite(D2(kB).z0));
+        D2(kB)=index_struct(D2(kB), isfinite(D2(kB).h_ph) & isfinite(D2(kB).z0));
     else
-        D2(kB)=index_struct(D2(kB), isfinite(D2(kB).h));
+        D2(kB)=index_struct(D2(kB), isfinite(D2(kB).h_ph));
     end
 end
 
@@ -98,46 +92,31 @@ if isempty(x_AT_range)
     return
 end
 
-% new 11/2016: use the segment number if it exists (OTW add)
-if isfield(D2,'ph_seg_num')
-    for kB=1:2
-        D2(kB).seg_num=D2(kB).ph_seg_num;
-    end
-    D2=rmfield(D2,'ph_seg_num');
-end
-
-if ~isfield(D2,'seg_num')
-    for kB=1:2
-        D2(kB).seg_num=1+floor(D2(kB).x_RGT/20);
-    end
-end
-
+%Removed checks on prameters alternative to segment_id. The script should crash if nothing is provided 
+    
 if ~exist('dist_for_segment','var')
-    uSeg=unique(cat(1, D2.seg_num));
-
+    uSeg=unique(cat(1, D2.segment_id));
+    uSeg=uSeg(isfinite(uSeg));
     for kB=1:2
          dist_for_segment{kB}=sparse(uSeg, ones(size(uSeg)), (uSeg-1)*20);
     end
 end
 
+seg_list=unique(cat(1, D2.segment_id));
+seg_list=seg_list(seg_list < min(length(dist_for_segment{1}), length(dist_for_segment{2})));
 
-seg_list=unique(cat(1, D2.seg_num));
-
-if exist('which_seg','var') && ~isempty(which_seg);
+if exist('which_seg','var') && ~isempty(which_seg)
     seg_list=seg_list(find(abs(seg_list-which_seg)==min(abs(seg_list-which_seg)), 1, 'first'));
 end
-
-% disp('READING L0 from file');
-% L0=load('bin_centers.txt');
 
 % NEW: 4/2016:  Add the histogram
 dh_hist_full(1:2)=deal(struct('dh', [-4.99:0.01:5]', 'count', uint8(zeros(length(-4.99:.01:5), length(seg_list)))));
 
 % added x_PS_ctr, y_PS_ctr, x_RGT, y_RGT, SNR, exit_iteration
-D3_fields={ 'segment_id', 'signal_selection_source', ...
+D3_fields={  'ATL06_quality_summary', 'signal_selection_source', ...
     'signal_selection_status_confident','signal_selection_status_all', 'signal_selection_status_backup', ...
     'h_expected_rms', 'sigma_geo_AT', 'sigma_geo_XT', ...
-    'RGT','GT','PT','cycle','orbit_number','seg_count', ...
+    'RGT','PT','cycle','seg_count', ...
     'track','beam', 'BGR','h_initial','w_surface_window_initial','w_surface_window_final',  ...
     'dh_fit_dx', 'dh_fit_dy', 'h_robust_spread', 'h_rms','h_mean','sigma_h_mean','h_med', ...
     'sigma_dh_fit_dx', 'fpb_error' ,'fpb_med_corr','fpb_mean_corr', 'med_r_fit', ...
@@ -146,10 +125,15 @@ D3_fields={ 'segment_id', 'signal_selection_source', ...
     'lat_ctr','lon_ctr', ...
     'fpb_med_corr_sigma','fpb_mean_corr_sigma', ...
     'first_seg_pulse','N_seg_pulses','time','SNR', 'SNR_significance','exit_iteration', ...
-    'surface_detection_failed','surface_height_invalid','cross_track_slope_invalid' ,'fpb_correction_failed'};
+    'surface_detection_failed','surface_height_invalid','cross_track_slope_invalid' ,'fpb_correction_failed', ...
+    'lat_mean', 'lon_mean', 'delta_x_ATC_mean'};
 
 for kf=1:length(D3_fields)
     D3_empty.(D3_fields{kf})=NaN;
+end
+int_fields={'N_initial','N_noise','n_fit_photons','N_seg_pulses'};
+for k=1:length(int_fields)
+    D3_empty.(int_fields{k})=0;
 end
 
 % NEW 10/2016: initialize ATL06 status and signal_selection_flags
@@ -169,23 +153,18 @@ dh_hist.geo_bin_list=NaN(10, numel(dh_hist.seg_0));
 [dh_hist.N_pulses, dh_hist.x_RGT_mean, dh_hist.x_PS_mean, dh_hist.y_PS_mean]=deal(NaN(1, numel(dh_hist.seg_0)));
 dh_hist=repmat(dh_hist, 1, 2);
 
-
 tic
 for k0=1:length(seg_list)
     % initial processing: find the intial vertical bin centers
     ybar=NaN(1,2);
     for kB=1:2
-        D3(k0, kB).segment_id=seg_list(k0);
+        D3(k0, kB).seg_count=seg_list(k0);
         [D3(k0, kB).x_RGT, x0]=deal(dist_for_segment{kB}(seg_list(k0)));
-        AT_els=D2(kB).seg_num==seg_list(k0)-1 | D2(kB).seg_num==seg_list(k0);
-        % HACK TO MAKE TEST INPUTS CONSISTENT
+        AT_els=D2(kB).segment_id==seg_list(k0)-1 | D2(kB).segment_id==seg_list(k0);
+        % N.B.  This should be changed to make the N_seg_pulses equal to
+        % velocity_sc scaled to ground speed times 
         D3(k0, kB).N_seg_pulses=57;
-%         if ~any(AT_els)
-%             D3(k0, kB).N_seg_pulses=40/.7;
-%         else
-%             D3(k0, kB).N_seg_pulses=max(40/.7, diff(range(D2(kB).pulse_num(AT_els)))+1);
-%         end
-        
+       
         if isfield(params(kB),'skip') &&  params(kB).skip
             AT_els=[];
         end
@@ -212,7 +191,7 @@ for k0=1:length(seg_list)
         
         if D3(k0, kB).signal_selection_source <=1  % if we are using ATL03 flagged PE
             [initial_fit_els, D3(k0, kB).w_surface_window_initial, D3(k0, kB).h_initial, ~]=...
-                initial_at_fit(D2sub(kB).x_RGT, D2sub(kB).h, initial_fit_els, x0, median(D2sub(kB).BGR), initial_Hwin_min, D3(k0, kB).N_seg_pulses, params(kB));
+                initial_at_fit(D2sub(kB).x_RGT, D2sub(kB).h_ph, initial_fit_els, x0, median(D2sub(kB).BGR), initial_Hwin_min, D3(k0, kB).N_seg_pulses, params(kB));
         end
         
         % define h_range_initial and (for cases 2 and 3) w_surface_window_initial
@@ -220,10 +199,10 @@ for k0=1:length(seg_list)
         if D3(k0, kB).signal_selection_source ==2 &&  D3(k0, kB).signal_selection_status_backup ~=3  % not enough confident or padded PE have been found, fall back to alternate strategies
             [initial_fit_els, D3(k0, kB).signal_selection_source, D3(k0, kB).signal_selection_status_backup]=...
                 backup_signal_finding_strategy(D2sub(kB), D2(kB), seg_list(k0), 10);
-            h_range_initial(kB)=diff(range(D2sub(kB).h));
+            h_range_initial(kB)=diff(range(D2sub(kB).h_ph));
             if any(initial_fit_els)
-                D3(k0, kB).w_surface_window_initial=diff(range(D2sub(kB).h(initial_fit_els)));  
-                D3(k0, kB).h_initial=mean(D2sub(kB).h(initial_fit_els));
+                D3(k0, kB).w_surface_window_initial=diff(range(D2sub(kB).h_ph(initial_fit_els)));  
+                D3(k0, kB).h_initial=mean(D2sub(kB).h_ph(initial_fit_els));
             else
                 D3(k0, kB).w_surface_window_initial=NaN;
                 D3(k0, kB).h_initial=NaN;
@@ -251,11 +230,27 @@ for k0=1:length(seg_list)
             else
                 [D3(k0, kB), r, els]=ATLAS_LS_fit(D2sub(kB), D3(k0, kB).x_RGT, initial_fit_els, D3(k0,kB).w_surface_window_initial, params(kB), D3(k0, kB), LS_fit_options);
             end
-             
+            
+            D3(k0, kB).delta_x_ATC_mean=mean(D2sub(kB).x_RGT(els));
+            
             if SAVELOG
                 LOG(k0, kB).els_after_LS_fit=els;
                 LOG(k0, kB).r_after_LS_fit=r;
             end
+            
+            % calculate the SNR significance
+            if exist('SNR_F_table','var')
+                D3(k0, kB).SNR_significance=...
+                    interpn(SNR_F_table.SNR, SNR_F_table.W_surface_window_initial, SNR_F_table.BGR, SNR_F_table.P_NoiseOnly, ...
+                max(min(SNR_F_table.SNR), min(max(SNR_F_table.SNR), D3(k0, kB).SNR)), ...
+                max(3, min(max(SNR_F_table.W_surface_window_initial), h_range_initial(kB))), ...
+                max(min(SNR_F_table.BGR), min(max(SNR_F_table.BGR) , D3(k0, kB).BGR)));
+            end
+            
+             %NEW: bail out if the SNR_significance is too high
+             if D3(k0, kB).SNR_significance >0.05
+                 continue
+             end
             
             D3(k0, kB).med_r_fit=median(r);
             D3(k0, kB).n_fit_photons=length(r);
@@ -282,8 +277,7 @@ for k0=1:length(seg_list)
             end
             
             D3(k0, kB).N_noise=median(D2sub(kB).BGR)*D3(k0, kB).w_surface_window_final/(CONSTANTS.c/2)*57;
-            %sigma_hat_robust=robust_peak_width_from_hist(t_WF, N_WF_corr, D3(k0, kB).N_noise, D3(k0, kB).w_surface_window_final*[-0.5 0.5]/(CONSTANTS.c/2));
-            %[D3(k0, kB).TX_med_corr, D3(k0, kB).TX_mean_corr]=correct_for_TX_shape(sigma_hat_robust,[],  params(kB).WF.t, params(kB).WF.p, D3(k0, kB).w_surface_window_final/(1.5e8));
+
             if isfield(params(kB),'WF')
                 [D3(k0, kB).TX_med_corr, D3(k0, kB).TX_mean_corr, syn_WF]=correct_for_TX_shape(params(kB).WF.t, params(kB).WF.p, D3(k0, kB).w_surface_window_final/(1.5e8),...
                     D3(k0, kB).h_robust_spread/1.5e8, D3(k0, kB).SNR);
@@ -305,22 +299,12 @@ for k0=1:length(seg_list)
             
             % Calculate the final h_LI
             D3(k0, kB).h_LI=D3(k0, kB).h_mean + D3(k0, kB).fpb_med_corr + D3(k0, kB).TX_med_corr;
-            
-            % calculate the SNR significance
-            if exist('SNR_F_table','var')
-                D3(k0, kB).SNR_significance=...
-                    interpn(SNR_F_table.SNR, SNR_F_table.W_surface_window_initial, SNR_F_table.BGR, SNR_F_table.P_NoiseOnly, ...
-                max(min(SNR_F_table.SNR), min(max(SNR_F_table.SNR), D3(k0, kB).SNR)), ...
-                max(3, min(max(SNR_F_table.W_surface_window_initial), h_range_initial(kB))), ...
-                max(min(SNR_F_table.BGR), min(max(SNR_F_table.BGR) , D3(k0, kB).BGR)));
-            end
-            
-            
+  
             if false
                 % extra code to estimate the true fpb error
-                GG=[ones(size(D2sub_all(kB).h)), real(D2sub_all(kB).x_RGT)-D3(k0, kB).x_RGT];
-                els_all=abs(D2sub_all(kB).h-GG*[D3(k0, kB).h_mean; D3(k0, kB).dh_fit_dx]) < D3(k0, kB).w_surface_window_final/2;
-                m_all=GG(els_all,:)\D2sub_all(kB).h(els_all);
+                GG=[ones(size(D2sub_all(kB).h_ph)), real(D2sub_all(kB).x_RGT)-D3(k0, kB).x_RGT];
+                els_all=abs(D2sub_all(kB).h_ph-GG*[D3(k0, kB).h_mean; D3(k0, kB).dh_fit_dx]) < D3(k0, kB).w_surface_window_final/2;
+                m_all=GG(els_all,:)\D2sub_all(kB).h_ph(els_all);
                 %fprintf(1, 'widths are: [sigma_hat_robust, sigma_hat_robust_all]=\t[%4.2d %4.2d], slope spreading is %3.2d\n', sigma_hat_robust*1.5e8, sigma_hat_robust_all, std(D2sub(kB).zground(D2sub(kB).SigNoise==1)-D2sub(kB).z0(D2sub(kB).SigNoise==1)));
                 D3(k0, kB).fpb_error=D3(k0, kB).h_mean-m_all(1);
             end
@@ -343,23 +327,23 @@ for k0=1:length(seg_list)
             else
                 D3(k0, kB).time=median(D2sub(kB).delta_time);
             end
-            % NEW 10/2015:  Use regression to calculate reference center
-            % parameters
-            % regress WRT along-track distance to get parameters for segment
-            % center
+            % NEW 10/2015:  Use regression to calculate reference center parameters
+            % regress WRT along-track distance to get parameters for
+            % segment center: 
             %'x_PS_ctr', 'y_PS_ctr', 'lat_ctr','lon_ctr'
             Ginv_AT=[ones(size(D2sub(kB).x_RGT(els))) D2sub(kB).x_RGT(els)-D3(k0, kB).x_RGT]\eye(sum(els));
             Ginv_AT=Ginv_AT(1,:);
-            %             D3(k0, kB).x_PS_ctr=Ginv_AT*D2sub(kB).x0(els);
-            %             D3(k0, kB).y_PS_ctr=Ginv_AT*D2sub(kB).y0(els);
             if isfield(D2sub,'lat')
                 D3(k0, kB).lat_ctr=Ginv_AT*D2sub(kB).lat(els);
                 D3(k0, kB).lon_ctr=Ginv_AT*D2sub(kB).lon(els);
+                %DEBUGGING 9/18
+                D3(k0, kB).lat_mean=mean(D2sub(kB).lat(els));
+                D3(k0, kB).lon_mean=mean(D2sub(kB).lon(els));
             else
                 D3(k0, kB).lat_ctr=Ginv_AT*D2sub(kB).lat_ph(els);
                 D3(k0, kB).lon_ctr=Ginv_AT*D2sub(kB).lon_ph(els);
             end
-            
+                                 
             if isnan(D3(k0, kB).h_LI)
                 D3(k0, kB).surface_height_invalid=true;
             end
@@ -375,16 +359,16 @@ for k0=1:length(seg_list)
     for kB=1:2
         D3(k0, kB).dh_fit_dy=dh_fit_dy;
     end
-    % error propagation steps, calculated after final dh_dy is set
     
+    % error propagation steps, calculated after final dh_dy is set
     if ~isfinite(dh_fit_dy); dh_fit_dy=0; end
     for kB=1:2
         if ~isfinite(D3(k0, kB).h_mean); continue; end        
         N_sig=max(0,D3(k0, kB).n_fit_photons-D3(k0, kB).N_noise);
-        sigma_signal=sqrt((dh_fit_dy.^2+D3(k0, kB).dh_fit_dx.^2)*params(kB).sigma_x.^2 + (params(kB).sigma_pulse*1.5e8).^2);
-        
-        
-        D3(k0, kB).sigma_photon_est=sqrt((D3(k0, kB).N_noise*(D3(k0, kB).w_surface_window_final*.287).^2+N_sig*sigma_signal.^2)/D3(k0, kB).n_fit_photons);
+        D3(k0, kB).h_expected_rms=sqrt((dh_fit_dy.^2+D3(k0, kB).dh_fit_dx.^2)*params(kB).sigma_x.^2 + (params(kB).sigma_pulse*1.5e8).^2);
+        % PROPOSED CHANGE TO:
+        %D3(k0, kB).h_expected_rms=sqrt((D3(k0, kB).dh_fit_dx*params(kB).sigma_x).^2 + (params(kB).sigma_pulse*1.5e8).^2);
+        D3(k0, kB).sigma_photon_est=sqrt((D3(k0, kB).N_noise*(D3(k0, kB).w_surface_window_final*.287).^2+N_sig*D3(k0, kB).h_expected_rms.^2)/D3(k0, kB).n_fit_photons);
         sigma_per_photon=max(D3(k0, kB).sigma_photon_est, D3(k0, kB).h_robust_spread);
         D3(k0, kB).sigma_h_mean=D3(k0, kB).sigma_h_mean*sigma_per_photon;
         D3(k0, kB).sigma_dh_fit_dx=D3(k0, kB).sigma_dh_fit_dx*sigma_per_photon;
@@ -394,17 +378,15 @@ for k0=1:length(seg_list)
     for kB=1:2
         if isfield(params,'RGT')
             D3(k0, kB).RGT=params(kB).RGT;
-            D3(k0, kB).GT=params(kB).GT;
             D3(k0, kB).PT=params(kB).PT;
             D3(k0, kB).cycle=params(kB).cycle;
-            D3(k0, kB).orbit_number=params(kB).orbit_number;
         end
     end
     % new, 4/2016: calculate residual histogram
     for kB=1:2
         if ~isfinite(D3(k0, kB).h_mean); continue; end
         xx=D2sub(kB).x_RGT-D3(k0, kB).x_RGT;
-        zz=D2sub(kB).h;
+        zz=D2sub(kB).h_ph;
         zz=zz(abs(xx)<10);  % select elements from the non-overlapping parts of the segment
         xx=xx(abs(xx)<10);
         if isempty(xx); continue; end
@@ -425,11 +407,6 @@ for k0=1:length(seg_list)
         disp([num2str(k0) ' out of ' num2str(length(seg_list))]);
         clear D3a;
         f=fieldnames(D3); for kF=1:length(f); for kB=1:2; D3a.(f{kF})(:,kB)=cat(1, D3(:, kB).(f{kF})); end; end
-        r=[D3a.h_LI-D3a.z0];
-        fprintf(1, 'mean r =%3.2d, std r =%3.2d\n', [mean(r(isfinite(r))), std(r(isfinite(r)))]);
-        %         if exist('save_file','var');
-        %             save(save_file, 'D3');
-        %         end
     end
 end
 
@@ -444,8 +421,10 @@ ff=fieldnames(D3);
 for kF=1:length(ff)
     for kB=1:2
         D3a.(ff{kF})(:,kB)=cat(1, D3(:, kB).(ff{kF}));
-    end;
+    end
 end
+
+D3a.ATL06_quality_summary=calc_ATL06_summary_flag(D3a);
 
 % new 4/2016: stack the dh_histogram by 10.
 for kB=1:2
@@ -497,16 +476,11 @@ end
 if options.restrict_fit_to_initial_els
     selectable_els=initial_els;
 else
-    selectable_els=true(size(D2.h));
+    selectable_els=true(size(D2.h_ph));
 end
 
 
 c2=3e8/2;
-if isfield(D2,'elev')
-    D2.h=D2.elev;
-end
-
-m=[]; sub1=[]; r0=[];
 
 if SAVELOG
     LOG.iterations=struct('els', [], 'sigma_r', [], 'sigma_expected', [], 'W_win', [], 'h_ctr', [], 'dhdx', []);
@@ -518,23 +492,23 @@ ds=real(D2.x_RGT)-L0;
 els=initial_els;
 
 G=[ones(size(ds(:))), ds(:)];
-m=G(els,:)\D2.h(els);
+m=G(els,:)\D2.h_ph(els);
 
 D3.N_initial=sum(els);
 if SAVELOG; LOG.G=G; end
 % iterate to reduce residuals
 Noise_Ph_per_m=D3.N_seg_pulses*median(D2.BGR)/c2;
 if ~exist('H_win','var')|| isempty(H_win)
-    H_win=diff(range(D2.h(els)));
+    H_win=diff(range(D2.h_ph(els)));
 end
 
-filter_hist=false(options.N_it, numel(D2.h));
+filter_hist=false(options.N_it, numel(D2.h_ph));
 
 for k=1:options.N_it
     m_last=m;
-    m=G(els,:)\D2.h(els);
+    m=G(els,:)\D2.h_ph(els);
     
-    r_all=D2.h-G*m;
+    r_all=D2.h_ph-G*m;
     r0=r_all(els);
     sigma_r=min(5,robust_peak_width_CDF(r0, Noise_Ph_per_m*H_win, [0 H_win]-H_win/2));
     sigma_expected=sqrt((c2*params.sigma_pulse).^2+params.sigma_x.^2*(m(2).^2));
@@ -566,14 +540,8 @@ for k=1:options.N_it
         break
     end
  
-%     %check if we've tested this collection of elements before
-%     if any(all(els(:)'==filter_hist(1:k,:),2));
-%         break
-%     end
 end
 
-% plotting command:
-%clf; plot(real(D2.x0), D2.h,'.'); hold on; plot(real(D2.x0(els)), D2.h(els),'ro'), plot(real(D2.x0(els)), G(els,:)*m,'g')
 
 D3.h_mean=m(1);
 D3.dh_fit_dx=m(2);
@@ -586,7 +554,7 @@ D3.h_rms=std(r0);
 D3.h_med=m(1)+median(r0);
 
 % NEW 10/2015: Calculate the noise estimate and the SNR
-Noise_est=H_win*Noise_Ph_per_m;%????-length(unique(D2.pulse_num))*median(D2.BGR)/c2;
+Noise_est=H_win*Noise_Ph_per_m;
 D3.SNR=(sum(els)-Noise_est)./Noise_est;
 
 % NEW 10/2015: Report the exit iteration
@@ -623,7 +591,7 @@ function [els, signal_selection_source, sss_confident, sss_all]=choose_ground_st
 [signal_selection_source, sss_confident, sss_all]=deal(0);
 
 % check if there are enough flagged (not padded) photons
-els=D2.ph_class > 1 &  isfinite(D2.h) ;
+els=D2.signal_conf_ph > 1 &  isfinite(D2.h_ph) ;
 
 if ~any(els) || diff(range(D2.x_RGT(els))) < 20
     % not enough space between first and last PE
@@ -645,7 +613,7 @@ if signal_selection_source==0
 end
 
 % now check if there are enough PE including the pad
-els=D2.ph_class >= 1 &  isfinite(D2.h);
+els=D2.signal_conf_ph >= 1 &  isfinite(D2.h_ph);
 if  ~any(els) || diff(range(D2.x_RGT(els))) < 20
     % along-track spread of PE too small
     signal_selection_source=2;
@@ -662,14 +630,14 @@ if sum(els) <10
 end
 
 %-------------------------------------------
-function [selected_PE, signal_selection_source, signal_selection_status]=backup_signal_finding_strategy(D2_local, D2_all, seg_num, W)
+function [selected_PE, signal_selection_source, signal_selection_status]=backup_signal_finding_strategy(D2_local, D2_all, segment_id, W)
 
-found=D2_local.ph_class > 1 &   isfinite(D2_local.h);
+found=D2_local.signal_conf_ph > 1 &   isfinite(D2_local.h_ph);
 if any(found)
     % if we have any selected PE, center the window on them, see if this
     % gives us a valid window (of any quality
-    Hmean=mean(D2_local.h(found));
-    els=abs(D2_local.h-Hmean)<5;
+    Hmean=mean(D2_local.h_ph(found));
+    els=abs(D2_local.h_ph-Hmean)<5;
     if sum(els) > 10 && diff(range(D2_local.x_RGT(els)))>20
         selected_PE=els;
         signal_selection_source=2;
@@ -679,8 +647,7 @@ if any(found)
 end
 
 % nothing found, or the PE around the found PE were not usable.
-
-these=D2_all.seg_num >=  seg_num-2 & D2_all.seg_num <= seg_num+1;
+these=D2_all.segment_id >=  segment_id-2 & D2_all.segment_id <= segment_id+1;
 if sum(these)<10
     selected_PE=[];
     signal_selection_source=3;
@@ -689,25 +656,19 @@ if sum(these)<10
 end
 
 % use the histogram strategy
-h=D2_all.h(these);
+h=D2_all.h_ph(these);
 bins=(floor(min(h))+0.25):0.5:ceil(max(h));
-% count=my_histc(h, bins);
-% % lazy programming: the count for bin +-W/2 on an 0.5 m grid is found by convolving with a
-% % boxcar 2W high
-% C1=conv(count(:), ones(2*W, 1),'same');
 
 C1=zeros(size(bins));
 for kB=1:length(C1); 
     C1(kB)=sum(abs(h-bins(kB))<W/2);
 end
 
-
-
-% procede if more than 15 PE are in the best bin
+% procede if more than 20 PE are in the best bin
 if max(C1) > 20   
     % select the bins that are not significantly differnt from the peak
     z0r=range(bins(C1>max(C1)-sqrt(max(C1))));
-    selected_PE=D2_local.h >= z0r(1)-W/2 & D2_local.h <= z0r(2)+W/2;
+    selected_PE=D2_local.h_ph >= z0r(1)-W/2 & D2_local.h_ph <= z0r(2)+W/2;
 else
     selected_PE =[];
 end
