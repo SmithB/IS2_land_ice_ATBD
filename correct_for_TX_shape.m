@@ -50,7 +50,10 @@ if exist('SNR', 'var')
     last_t_ctr=t1(1);
     % begin centered on the median
     t_ctr=LCH(2);
-    while abs(t_ctr-last_t_ctr) > 1e-4/1.5e8
+    
+    count=0;
+    while abs(t_ctr-last_t_ctr) > 1e-4/1.5e8 && count<50
+        count=count+1;
         els=abs(t1-t_ctr)<HW/2;
         last_t_ctr=t_ctr;
         t_ctr=sum(TX_WF_broadened(els).*t1(els))/sum(TX_WF_broadened(els));
