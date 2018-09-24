@@ -15,21 +15,29 @@ BGR=N_BG/diff(XR);
 
 N_sig=max(0,length(x)-N_BG);
 
+if N_sig <= 1
+    sigma_hat=diff(XR)/N_BG;
+    med=mean(range(x));
+    return
+end
+
+
 xs=sort(x); xs=xs(:);
 C=0.5:length(x)-0.5; C=C(:);
 
 %new October 2015: switch to P vals of .25 and .75, include correction
 %based on the erfinv 
+% new June 2018; Correct scale factor diff(erf(P_vals)) was wrong!
  P_vals=[.25 .75];
-% scale_factor=diff(erfinv(P_vals));
+% scale_factor=sqrt(2)*diff(erfinv(2*P_vals-1));
 % N.B.  This is always the same, so compute by hand:
-scale_factor=.5881;
+scale_factor=1.349;
 
 i0=find(C<P_vals(1)*N_sig + (xs-XR(1))*BGR, 1, 'last'); 
 if isempty(i0); i0=1;end
 i1=find(C>P_vals(2)*N_sig + (xs-XR(1))*BGR, 1, 'first');
 if isempty(i1); i1=length(x);end
-sigma_hat=diff(xs([i0 i1]))/2/scale_factor;
+sigma_hat=diff(xs([i0 i1]))/scale_factor;
 
 if nargout==3
     DEBUG_OUT.i0=i0;
@@ -46,7 +54,7 @@ end
 if sigma_hat < 0
     i0=find(C < (0.5*length(x)+0.5-N_sig/4), 1, 'last');
     i1=find(C > (0.5*length(x)+0.5+N_sig/4), 1, 'first');
-    sigma_hat=diff(xs([i0 i1]))/2/scale_factor;
+    sigma_hat=diff(xs([i0 i1]))/scale_factor;
 end
 
 if sigma_hat<0
