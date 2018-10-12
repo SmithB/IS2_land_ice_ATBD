@@ -1,4 +1,4 @@
-function H=read_ATL03_photon_data(filename, pairs, params, geoloc)
+function [H, D]=read_ATL03_photon_data(filename, pairs, params, geoloc)
 
 beams=sort([2*pairs(:)-1; 2*pairs(:)]);
 
@@ -26,7 +26,7 @@ if ~isfield(params,'signal_conf_type')
 end
  
 if ~exist('geoloc','var')
-    geoloc=read_ATL03_geoloc(filename, pairs, params);
+    geoloc=read_ATL03_geolocation(filename, pairs, params);
 end
 
 % make the photon count range (tells which photons to read
@@ -45,7 +45,7 @@ end
 % read the photon data beam by beam
 for kT=pairs(:)'%length(GT)
     for kB=1:length(LR)
-        beam=(kT-1)*2+kB;;
+        beam=(kT-1)*2+kB;
         GT_grp=sprintf('/gt%s%s', GT{kT}, LR{kB});
         
         F1=fieldnames(out_struct);
