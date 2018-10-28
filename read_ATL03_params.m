@@ -9,7 +9,7 @@ LR={'l','r'};
 
 % read which TEP to use with which spot (laser beam?? check this)
 try
-    TEP_spots=h5read(filename,'/ancillary_data/temp/temp_valid_spot');
+    TEP_spots=h5read(filename,'/ancillary_data/tep/tep_valid_spot');
 catch
     TEP_spots=ones(1,6);
 end
@@ -38,5 +38,9 @@ for kT=pairs(:)'%length(GT)
         params(beam).spot_number=str2double(deblank(h5readatt(filename, GT_grp,'atlas_spot_number')));
         params(beam).PT=str2double(kT);     
         params(beam).WF=WF(TEP_spots(params(beam).spot_number));
+         
     end
 end
+ 
+
+
