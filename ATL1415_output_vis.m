@@ -2,10 +2,11 @@
 
 % plots showing ATL14/15 output accuracy
 
-[~, out]=unix('ls v9_hdf/PIG_ATL11_dh_clouds/run*/ATL13_solution.mat');
+%[~, out]=unix('ls v9_hdf/PIG_ATL11_dh_clouds/run*/ATL13_solution.mat');
+[~, out]=unix('ls /Volumes/ice1/ben/sdt/ATLxx_example/PIG_Collab_v13/ATL14/run_*/ATL13_solution.mat');
 % [~, out]=unix('ls v9_hdf/PIG_ATL11_with_dh_run_*/tau=2.0//ATL13_solution.mat');
 out=strsplit(deblank(out));
-for k=1:length(out);
+for k=1:length(out)
     temp=load(out{k},'dzbar');
     temp.dzbar.sigma=sqrt(mean((temp.dzbar.z_est(:,:,1:12)-temp.dzbar.z_true(:,:,1:12)).^2,3));
     dzbar(k)=temp.dzbar;

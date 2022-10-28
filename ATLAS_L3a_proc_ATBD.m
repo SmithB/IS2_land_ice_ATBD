@@ -48,15 +48,19 @@ else
     SAVELOG=false;
 end
 
-CONSTANTS.dt_hist=5e-12;
+%CONSTANTS.dt_hist=5e-12;
+% NOTE: CHANGED 4/24/2019 to match ASAS
+CONSTANTS.dt_hist=2.5e-11;
+
 CONSTANTS.c=299792458; %speed of light (m/s)
+CONSTANTS.residual_histogram_spacing=0.01;
 
 for kB=1:2
     tt=min(params(kB).WF.t):CONSTANTS.dt_hist:max(params(kB).WF.t);
     params(kB).WF=struct('t', tt, 'p', interp1(params(kB).WF.t, params(kB).WF.p, tt));
 end
 
-if ~isfield(params,'pulses_per_seg'); for kB=1:2; params(kB).pulses_per_seg=57; end;end
+%if ~isfield(params,'pulses_per_seg'); for kB=1:2; params(kB).pulses_per_seg=57; end;end
 
 if ~isfield(params,'sigma_pulse')
     for k=1:length(params)
@@ -106,11 +110,11 @@ seg_list=unique(cat(1, D2.segment_id));
 seg_list=seg_list(seg_list < min(length(dist_for_segment{1}), length(dist_for_segment{2})));
 
 if exist('which_seg','var') && ~isempty(which_seg)
-    seg_list=seg_list(find(abs(seg_list-which_seg)==min(abs(seg_list-which_seg)), 1, 'first'));
+    seg_list=unique(seg_list(ismember(seg_list, which_seg)));
 end
 
 % NEW: 4/2016:  Add the histogram
-dh_hist_full(1:2)=deal(struct('dh', [-4.99:0.01:5]', 'count', uint8(zeros(length(-4.99:.01:5), length(seg_list)))));
+dh_hist_full(1:2)=deal(struct('dh', [-4.99:0.01:5]', 'count', uint8(zeros(length(-4.99:CONSTANTS.residual_histogram_spacing:5), length(seg_list)))));
 
 % added x_PS_ctr, y_PS_ctr, x_RGT, y_RGT, SNR, exit_iteration
 D3_fields={  'ATL06_quality_summary', 'signal_selection_source', ...
@@ -145,26 +149,29 @@ end
 D3=repmat(D3_empty, [length(seg_list),2]);
 
 % new 4/2016: setup the output version of the dh_hist.
-dh_hist.seg_0=find(mod(seg_list, 10)==0);
+dh_hist.seg_0=find(mod(seg_list, 10)==0)';
 dh_hist.seg_1=min(dh_hist.seg_0+9, length(seg_list));
 dh_hist.dh=dh_hist_full.dh;
 dh_hist.count=uint16(zeros(numel(dh_hist.dh), numel(dh_hist.seg_0)));
-dh_hist.geo_bin_list=NaN(10, numel(dh_hist.seg_0));
-[dh_hist.N_pulses, dh_hist.x_RGT_mean, dh_hist.x_PS_mean, dh_hist.y_PS_mean]=deal(NaN(1, numel(dh_hist.seg_0)));
+[dh_hist.geo_bin_list, dh_hist.segment_id_list]=deal(NaN(10, numel(dh_hist.seg_0)));
+[dh_hist.N_pulses, dh_hist.x_RGT_mean, dh_hist.x_PS_mean, dh_hist.y_PS_mean, dh_hist.lat_mean, dh_hist.lon_mean, dh_hist.bckgrd_per_bin]=deal(NaN(1, numel(dh_hist.seg_0)));
 dh_hist=repmat(dh_hist, 1, 2);
 
 tic
 for k0=1:length(seg_list)
     % initial processing: find the intial vertical bin centers
     ybar=NaN(1,2);
+    clear D2sub
     for kB=1:2
         D3(k0, kB).seg_count=seg_list(k0);
-        [D3(k0, kB).x_RGT, x0]=deal(dist_for_segment{kB}(seg_list(k0)));
+        [D3(k0, kB).x_RGT, x0]=deal(full(dist_for_segment{kB}(seg_list(k0))));
+        if D3(k0, kB).x_RGT==0; D3(k0, kB).x_RGT=NaN; continue; end
         AT_els=D2(kB).segment_id==seg_list(k0)-1 | D2(kB).segment_id==seg_list(k0);
         % N.B.  This should be changed to make the N_seg_pulses equal to
         % velocity_sc scaled to ground speed times 
-        D3(k0, kB).N_seg_pulses=57;
-       
+        %D3(k0, kB).N_seg_pulses=57;
+         
+        
         if isfield(params(kB),'skip') &&  params(kB).skip
             AT_els=[];
         end
@@ -176,9 +183,13 @@ for k0=1:length(seg_list)
             D3(k0, kB).signal_selection_status_confident=3;
             D3(k0, kB).signal_selection_status_all=3;
             D3(k0, kB).signal_selection_status_backup=3;
+            D3(k0, kB).N_seg_pulses=NaN;
             continue;
         end
         D2sub(kB)=index_struct(D2(kB), AT_els);
+        %D3(k0, kB).N_seg_pulses=max(56, diff(range(D2sub(kB).pulse_num))+1);
+        %!!! changed this 4/24/19 to match ASAS
+        D3(k0, kB).N_seg_pulses=diff(range(D2sub(kB).pulse_num));
         % try choosing the ground strategy
         [initial_fit_els, D3(k0, kB).signal_selection_source, D3(k0, kB).signal_selection_status_confident,  D3(k0, kB).signal_selection_status_all]=...
             choose_ground_strategy(D2sub(kB));
@@ -258,16 +269,21 @@ for k0=1:length(seg_list)
             % make the time histogram:
             clear temp;
             temp.time=-2/CONSTANTS.c*r;
-            t_WF=((min(temp.time)-2.5*CONSTANTS.dt_hist):CONSTANTS.dt_hist:(max(temp.time)+params(kB).t_dead))';
-            N_WF=my_histc(  temp.time, t_WF);
+            %t_WF=((min(temp.time)-2.5*CONSTANTS.dt_hist):CONSTANTS.dt_hist:(max(temp.time)+params(kB).t_dead))';
+            % CHANGED 4/2019 to match ASAS
+            t_WF=(min(temp.time):CONSTANTS.dt_hist:(max(temp.time)+params(kB).t_dead))';
+            N_WF=my_histc(temp.time, t_WF);
             
             % quit if we've somehow lost photons
             if sum(N_WF) < 10 || ~any(isfinite(N_WF)); continue; end
             
-            if ~isfield(params,'N_channels'); [params(:).N_channels]=deal(params(:).N_det); end;
+            if ~isfield(params,'N_channels'); [params(:).N_channels]=deal(params(:).N_det); end
             % Changed 3/24/2016
+            %[D3(k0, kB).fpb_med_corr, D3(k0, kB).fpb_mean_corr, D3(k0, kB).fpb_N_corr, N_WF_corr, D3(k0, kB).fpb_med_corr_sigma, D3(k0, kB).fpb_mean_corr_sigma, minGain, fpb_gain]=...
+            %    fpb_corr(t_WF, N_WF, params(kB).N_channels, D3(k0, kB).N_seg_pulses, params(kB).t_dead,  0.01, CONSTANTS.dt_hist);
             [D3(k0, kB).fpb_med_corr, D3(k0, kB).fpb_mean_corr, D3(k0, kB).fpb_N_corr, N_WF_corr, D3(k0, kB).fpb_med_corr_sigma, D3(k0, kB).fpb_mean_corr_sigma, minGain, fpb_gain]=...
-                fpb_corr(t_WF, N_WF, params(kB).N_channels, D3(k0, kB).N_seg_pulses, params(kB).t_dead,  0.01, CONSTANTS.dt_hist);
+                fpb_corr_nonparalyzable(t_WF, N_WF, params(kB).N_channels, D3(k0, kB).N_seg_pulses, params(kB).t_dead, CONSTANTS.dt_hist);
+            
             % check if gain correction is valid
             if minGain < 1/(2*params(kB).N_channels)
                 D3(k0, kB).fpb_correction_failed=true;
@@ -276,7 +292,7 @@ for k0=1:length(seg_list)
                 D3(k0, kB).surface_detection_failed=1;
             end
             
-            D3(k0, kB).N_noise=median(D2sub(kB).BGR)*D3(k0, kB).w_surface_window_final/(CONSTANTS.c/2)*57;
+            D3(k0, kB).N_noise=median(D2sub(kB).BGR)*D3(k0, kB).w_surface_window_final/(CONSTANTS.c/2)*D3(k0, kB).N_seg_pulses;
 
             if isfield(params(kB),'WF')
                 [D3(k0, kB).TX_med_corr, D3(k0, kB).TX_mean_corr, syn_WF]=correct_for_TX_shape(params(kB).WF.t, params(kB).WF.p, D3(k0, kB).w_surface_window_final/(1.5e8),...
@@ -319,8 +335,10 @@ for k0=1:length(seg_list)
             % pull out the beam number
             temp=unique(D2sub(kB).beam(isfinite(D2sub(kB).beam)));
             D3(k0, kB).beam=temp(1);
-            temp=unique(D2sub(kB).track(isfinite(D2sub(kB).track)));
-            D3(k0, kB).track=temp(1);
+            if isfield(D2sub(kB),'track')
+                temp=unique(D2sub(kB).track(isfinite(D2sub(kB).track)));
+                D3(k0, kB).track=temp(1);
+            end
             D3(k0, kB).first_seg_pulse=min(D2sub(kB).pulse_num);
             if isfield(D2sub,'time')
                 D3(k0, kB).time=median(D2sub(kB).time);
@@ -365,11 +383,13 @@ for k0=1:length(seg_list)
     for kB=1:2
         if ~isfinite(D3(k0, kB).h_mean); continue; end        
         N_sig=max(0,D3(k0, kB).n_fit_photons-D3(k0, kB).N_noise);
-        D3(k0, kB).h_expected_rms=sqrt((dh_fit_dy.^2+D3(k0, kB).dh_fit_dx.^2)*params(kB).sigma_x.^2 + (params(kB).sigma_pulse*1.5e8).^2);
-        % PROPOSED CHANGE TO:
-        %D3(k0, kB).h_expected_rms=sqrt((D3(k0, kB).dh_fit_dx*params(kB).sigma_x).^2 + (params(kB).sigma_pulse*1.5e8).^2);
+        %D3(k0, kB).h_expected_rms=sqrt((dh_fit_dy.^2+D3(k0, kB).dh_fit_dx.^2)*params(kB).sigma_x.^2 + (params(kB).sigma_pulse*1.5e8).^2);
+        % 10/2018: CHANGED TO:
+        D3(k0, kB).h_expected_rms=sqrt((D3(k0, kB).dh_fit_dx*params(kB).sigma_x).^2 + (params(kB).sigma_pulse*1.5e8).^2);
         D3(k0, kB).sigma_photon_est=sqrt((D3(k0, kB).N_noise*(D3(k0, kB).w_surface_window_final*.287).^2+N_sig*D3(k0, kB).h_expected_rms.^2)/D3(k0, kB).n_fit_photons);
-        sigma_per_photon=max(D3(k0, kB).sigma_photon_est, D3(k0, kB).h_robust_spread);
+        % CHANGED THIS FROM h_robust_spread to h_rms
+        %sigma_per_photon=max(D3(k0, kB).sigma_photon_est, D3(k0, kB).h_robust_spread); 
+        sigma_per_photon=max(D3(k0, kB).sigma_photon_est, D3(k0, kB).h_rms);
         D3(k0, kB).sigma_h_mean=D3(k0, kB).sigma_h_mean*sigma_per_photon;
         D3(k0, kB).sigma_dh_fit_dx=D3(k0, kB).sigma_dh_fit_dx*sigma_per_photon;
         D3(k0, kB).h_LI_sigma=max(D3(k0, kB).sigma_h_mean, D3(k0, kB).fpb_med_corr_sigma);
@@ -398,22 +418,27 @@ for k0=1:length(seg_list)
     if SAVELOG
         for kB=1:2
             LOG(k0, kB).D3=D3(k0, kB);
-            LOG(k0, kB).D2=D2sub(kB);
+            if exist('D2sub','var')
+                LOG(k0, kB).D2=D2sub(kB);
+            end
         end
     end
     
     
-    if mod(k0, 250)==0
-        disp([num2str(k0) ' out of ' num2str(length(seg_list))]);
-        clear D3a;
-        f=fieldnames(D3); for kF=1:length(f); for kB=1:2; D3a.(f{kF})(:,kB)=cat(1, D3(:, kB).(f{kF})); end; end
-    end
+%     if mod(k0, 250)==0
+%         disp([num2str(k0) ' out of ' num2str(length(seg_list))]);
+%     end
 end
 
 if isempty(D3)
     D3a=[];
     return
 end
+
+clear D3a;
+f=fieldnames(D3); for kF=1:length(f); for kB=1:2; D3a.(f{kF})(:,kB)=cat(1, D3(:, kB).(f{kF})); end; end
+
+
 
 %  new 4/2016 : collect the D3 to D3a:
 clear D3a;
@@ -426,18 +451,22 @@ end
 
 D3a.ATL06_quality_summary=calc_ATL06_summary_flag(D3a);
 
+
 % new 4/2016: stack the dh_histogram by 10.
 for kB=1:2
     for ks=1:length(dh_hist(kB).seg_0)
         els=dh_hist(kB).seg_0(ks):dh_hist(kB).seg_1(ks);
-        els=els(D3a.surface_height_invalid(els, kB)==0   & D3a.SNR(els, kB) > 0.5);
+        
+        %els=els(D3a.surface_height_invalid(els, kB)==0   & D3a.SNR(els, kB) > 0.5);
+        els=els(D3a.ATL06_quality_summary(els, kB)==0);
         if ~isempty(els)
+            dh_hist(kB).bckgrd_per_bin(ks)=sum(D3a.BGR(els, kB).*D3a.N_seg_pulses(els, kB)/2*CONSTANTS.residual_histogram_spacing/(CONSTANTS.c/2));
             dh_hist(kB).segment_id_list(1:length(els), ks)=D3a.seg_count(els, kB);
             dh_hist(kB).count(:, ks)=uint16(sum(dh_hist_full(kB).count(:, els), 2));
             dh_hist(kB).x_RGT_mean(ks)=mean(D3a.x_RGT(els, kB));
             dh_hist(kB).lat_mean(ks)=mean(D3a.lat_ctr(els, kB));
             dh_hist(kB).lon_mean(ks)=mean(D3a.lon_ctr(els, kB));
-            dh_hist(kB).N_pulses(ks)=sum(D3a.N_seg_pulses(els, kB))/2;
+            dh_hist(kB).N_pulses(ks)=sum(D3a.N_seg_pulses(els, kB))/2;            
         end
     end
 end

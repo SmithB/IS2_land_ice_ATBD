@@ -1,4 +1,4 @@
-function write_ATL11_h5(h5_file, D3b, D3a);
+function write_ATL11_h5(h5_file, D3b, D3a, params)
 
 if exist(h5_file,'file'); delete(h5_file); end
 
@@ -27,6 +27,16 @@ for k0=1:length(f0);
         end
     end
 end
+
+
+% write attributes:
+h5writeatt(h5_file,'/ref_surf/','poly_exp_x', params.poly_exp_x); 
+h5writeatt(h5_file,'/ref_surf/','poly_exp_y', params.poly_exp_y);
+h5writeatt(h5_file,'/ref_surf/','time_zero', params.time_zero);
+
+
+
+
 
 
 % rewrite the directory structure

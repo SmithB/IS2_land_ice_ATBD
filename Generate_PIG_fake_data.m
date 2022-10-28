@@ -10,7 +10,8 @@ replace=true;
 
 if false
     rep_list=1:N_reps;
-    tau_vals=[0 0.5 1 1.5 2 2.5 3 3.5 4];
+    tau_vals=0:4;
+    %tau_vals=[0 0.5 1 1.5 2 2.5 3 3.5 4];
     TP_list=1:32;
 end
 
@@ -78,7 +79,8 @@ params_R=params_L; params_R.N_per_pulse=3; params_R.N_channels=4;
 D.pair=ceil(D.beam/2);
  
 u_TP=unique([D.track, D.pair], 'rows');
- 
+TP_list=1:length(u_TP);
+
 interp_fields={'xy','t','x_RGT'};
 copy_fields={'track','beam','pair'};
 clear D2a_out params;
@@ -103,8 +105,8 @@ if apply_GF_error
         GF_error_scale=ceil(5000/diff(DEM.xsub(1:2)));
         GF_error_dec=floor(GF_error_scale/8);
         % generate the GF_error for the different repeats and track/pair combos
-        for k_rep=1:20;
-            for k_TP=1:length(u_TP);
+        for k_rep=1:20
+            for k_TP=1:length(u_TP)
                 K_error=gaussian(-3*GF_error_scale:3*GF_error_scale, 0, GF_error_scale);
                 temp=conv2_separable(randn(size(DEM.zsub)), K_error/sum(K_error));
                 temp=GF_error_mag*temp./std(temp(isfinite(temp)));
@@ -135,13 +137,13 @@ for rep_ind=1:length(rep_list)
             this_TP=u_TP(TP_list(k),:);
             % make code parallelizable
             out_file=sprintf('%s/Track_%d-Pair_%d_D2.h5',rep_dir, this_TP(1), this_TP(2));
-            if  ~replace
-                if exist(out_file,'file'); continue; end
-                status=lockfile_tool('lock', out_file);
-                if status~=0
-                    continue
-                end
-            end
+%             if  ~replace
+%                 if exist(out_file,'file'); continue; end
+%                 status=lockfile_tool('lock', out_file);
+%                 if status~=0
+%                     continue
+%                 end
+%             end
             fprintf(1,'working on %s\n', out_file);
             
             if apply_GF_error

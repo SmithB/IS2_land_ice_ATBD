@@ -1,4 +1,4 @@
-function write_ATL06_h5(D3, dh_hist, h5_file);
+function write_ATL06_h5(D3, dh_hist, h5_file)
 
 
 if exist(h5_file,'file'); delete(h5_file); end

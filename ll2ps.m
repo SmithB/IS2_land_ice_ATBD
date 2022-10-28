@@ -1,4 +1,4 @@
-function varargout=ll2ps(lat, lon);
+function varargout=ll2ps(lat, lon)
 
 % Antarctic polar-stereographic forward transform, with standard latitude of -71,
 % central longitude of 0.  This is a wapper function that calls
@@ -6,7 +6,7 @@ function varargout=ll2ps(lat, lon);
 
 
 [x,y]=polar_stereo_xform(lat, lon,'forward', struct('standard_latitude', -71,'hemisphere', -1, 'lon_offset', 0));
-if nargout==1;
+if nargout==1
     varargout={x+1i*y};
 elseif nargout==2
     varargout={x y};

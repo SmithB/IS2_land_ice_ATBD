@@ -1,4 +1,4 @@
-function t=random_wf_sim(WF_t, WF_p, n_photons, BG0, BG1);
+function t=random_wf_sim(WF_t, WF_p, n_photons, BG0, BG1)
 
 
 dt=(WF_t(end)-WF_t(1))/(length(WF_t)-1);

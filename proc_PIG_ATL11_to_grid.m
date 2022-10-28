@@ -4,8 +4,9 @@ run_type='dh_clouds';
 
 % setup the path defaults
 IS_paths=IS_LI_paths('dh_clouds');
-
- load('/PIG_LaserTracks')
+IS_paths.ATL11='/Volumes/ice1/ben/sdt/ATLxx_example/PIG_Collab_v13/ATL11/';
+IS_paths.ATL14='/Volumes/ice1/ben/sdt/ATLxx_example/PIG_Collab_v13/ATL14/';
+ load('data_files/PIG_groundtracks')
 
 [~, out]=unix(['ls -d ', IS_paths.ATL11, '/run*']);
 
@@ -78,9 +79,10 @@ for k_run=1:N_runs
     D.sigma=sqrt(Dcorr.pass_h_shapecorr_sigma.^2+Dcorr.pass_h_shapecorr_sigma_systematic.^2);
     D.PT=repmat(Dcorr.PT, [1 12]);
     D.RGT=repmat(Dcorr.RGT, [1 12]);
-  
+    D.quality=Dcorr.pass_quality_summary;
     
-    D=index_struct(D, isfinite(D.x) & isfinite(D.h) & isfinite(D.sigma) & abs(D.sigma) < 2);
+    
+    D=index_struct(D, isfinite(D.x) & isfinite(D.h) & isfinite(D.sigma) & abs(D.sigma) < 2 & D.quality==0);
     
     
     ff=fieldnames(D);
@@ -96,7 +98,7 @@ for k_run=1:N_runs
     M.XR=round_to(range(D.x), M.dx)+[-M.dx M.dx];
     M.YR=round_to(range(D.y), M.dx)+[-M.dx M.dx];
     M.TR=[0 3.25];
-    M.time_zero_season=6;
+    M.time_zero_season=2;
     
     W=sqrt(diff(M.YR).*diff(M.XR));
     
@@ -104,8 +106,8 @@ for k_run=1:N_runs
         'est_errors', false,'time_zero_season', 6);%, 'calc_PS_bias', true);
     %use default params for selected for Thwaties lakes: probably lax for the d2zdt2 parameter.  Set these as the
     %default
-    params.E_RMS_d2z0dx2=2e-7;
-    params.E_RMS_d3zdx2dt=6e-8;
+    params.E_RMS_d2z0dx2=2e-7/3;
+    params.E_RMS_d3zdx2dt=6e-8/3;
     params.E_RMS_d2zdt2=1;
     
     % define sigma structure:

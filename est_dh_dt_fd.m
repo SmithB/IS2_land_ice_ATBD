@@ -110,7 +110,7 @@ d2zdxdt.sub={ [0 0 0], [ 0 0 0], [-1 0 1]};
 d2zdxdt.val=[-1 2 -1]/dt/dt*dx; % integrand
 CEQ(k)=make_fd_op(grids.dz, d2zdxdt, 0, 2, eq_key.smooth_season_dz);
 
-if isfield(M.sigma,'time_gap');
+if isfield(M.sigma,'time_gap')
     % flat dz in time
     k=k+1;
     d2zdxdt.sub={ [0 0 ], [ 0 0 ], [-1 1]};
@@ -131,7 +131,7 @@ CEQ(k).node_num=(1:nx*ny)';
 k=1;
 dx0=M.dx0;
 d2z0dx2.sub={[0 0 0 ], [-1 0 1]};
-d2z0dx2.val=[-1 2 -1]/dx0;   % N.B. This is the sqare root of the spatial integrand. This would be /dx0/dx0, but the spatial integral cancels out one of the deltas
+d2z0dx2.val=[-1 2 -1]/dx0;   % N.B. This is the square root of the spatial integrand. This would be /dx0/dx0, but the spatial integral cancels out one of the deltas
 CEQ0(k)=make_fd_op(grids.z0, d2z0dx2,  Ndz, 020, eq_key.smooth_z0);
 k=k+1;
 d2z0dy2.sub={ [-1 0 1], [0 0 0]};

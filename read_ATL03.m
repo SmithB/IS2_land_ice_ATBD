@@ -35,14 +35,16 @@ out_struct.bckgrd_atlas=struct('bckgrd_rate', [],'pce_mframe_cnt',[],'delta_time
 
 D=repmat(out_struct, [max(beams),1]);
 
+
 % read which TEP to us with which spot (laser beam?? check this)
-TEP_spots=h5read(fname,'/ancillary_data/temp/temp_valid_spot');
-% read the TEP 
+TEP_spots=h5read(filename,'/ancillary_data/temp/temp_valid_spot');
+% read the TEP
 TEP_groups={'pce1_spot1', 'pce2_spot3'};
 for kG=1:length(TEP_groups);
     WF(kG).t=h5read(filename, ['/atlas_impulse_response/', TEP_groups(kG),'tep_hist_time']);
     WF(kG).p=h5read(filename, ['/atlas_impulse_response/', TEP_groups(kG),'tep_hist']);
 end
+
 
 for kT=pairs(:)'%length(GT)
     for kB=1:length(LR)
@@ -70,6 +72,7 @@ for kT=pairs(:)'%length(GT)
         params(beam).GT=beam;
         params(beam).spot_number=str2double(deblank(h5readatt(filename, GT_grp,'atlas_spot_number')));
         params(beam).PT=str2double(kT);
+        
         params(beam).WF=WF(tep_spots(params(beam).spot_number));
     end
 end

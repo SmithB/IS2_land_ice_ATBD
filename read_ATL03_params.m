@@ -1,4 +1,4 @@
-function params=read_ATL03_params(filename, beams)
+function params=read_ATL03_params(filename, pairs)
 
 if ~exist('pairs','var')
     pairs=1:3;

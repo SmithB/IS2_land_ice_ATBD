@@ -42,7 +42,7 @@ if false
     clear
     load ATLxx_example/WF_est;
     sigma_0=0.5*diff(wf_percentile(WF.t, WF.p, [0.16 0.84]));
-    % the minimum SNR is 10 PE /( 6 MHz * 20 m /1.5e8 m/s * 57 pulses)=.13
+    % the minimum SNR is 10 PE /( 6 MHz * 20 m /1.5e8 m/s * 57 pulses)=.21
     
     % need a quick test.  Do this for
     %-- signal between 10 and 684 PE/shot

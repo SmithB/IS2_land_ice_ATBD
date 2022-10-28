@@ -34,8 +34,8 @@ else
 end
 y0=flipud(y0(:));
 
-for row=1: rows; 
-    for col=1:cols; 
+for row=1: rows
+    for col=1:cols
         AX(row, col)=axes('position', [x0(col)+delta(1), y0(row)+delta(2), dx-delta(1)/2, dy-delta(2)/2]);
     end
 end

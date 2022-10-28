@@ -1,4 +1,4 @@
-function varargout=test_fpb_corr(varargin)
+function varargout=test_tx_shape_corr(varargin)
 
 if nargout>0
     [varargout{1:nargout}]=feval(varargin{:});
@@ -28,20 +28,20 @@ function [R, HW, bar_out, med_out]=run_sim(WF)
 N_chan=12;
 N_per_pulse=N_chan*1.25;
 R=0:.125:1;
-HW=[2:.5:4];
+HW=[3:.5:8];
 [R, HW]=meshgrid(R, HW);
 % aligh the transmit waveform with time zero at its centroid.
 dt_WF=(WF.t(2)-WF.t(1));
 WF.t=WF.t-sum(WF.t.*WF.p)./sum(WF.p);
- 
+BGR=1e6; 
 % N.B.  This can be run as a parfor if you have the parallel tool box
 parfor kk=1:numel(R)     
         fprintf(1, 'R=%d, HW=%3.1d\n', R(kk), HW(kk));
         
         % run this for enough iterations to beat down the noise in the means and medians caused by the spread of the RX pulse
-        N_pulses=floor(5e3*(R(kk).^2+.24^2)/(.24^2));
+        N_pulses=floor(5e4*(R(kk).^2+.24^2)/(.24^2));
         % Generate the fake data
-        [D2, params]=make_data(N_pulses, N_chan, R(kk), N_per_pulse, WF);
+        [D2, params]=make_data(N_pulses, N_chan, R(kk), N_per_pulse, WF, BGR);
         
         % test the correction
         [D3, D3u, D3a]=calc_h(D2, HW(kk), params);
@@ -53,13 +53,11 @@ parfor kk=1:numel(R)
         med(kk)=struct('med', temp_med,'centroid',temp_centroid,'centroid_uncorr', temp_centroid_uncorr, 'med_uncorr', temp_med_uncorr);
        
         % save output : calculate the mean of each output parameter
-        temp_med=mean(D3.med-D3a.med);
+        temp_med=mean(D3.med);
         temp_centroid=mean(D3.centroid);
         temp_med_uncorr=mean(D3u.med);
         temp_centroid_uncorr=mean(D3u.centroid);
         bar(kk)=struct('med', temp_med,'centroid',temp_centroid,'centroid_uncorr', temp_centroid_uncorr, 'med_uncorr', temp_med_uncorr);
-%    end
-%end
 end
 % collect the output:
 
@@ -195,6 +193,7 @@ CONSTANTS.dt_hist=25e-12;
 if length(segs)==1
     segs(2)=segs(1)+58;
 end
+[t_bin, bin_count]=deal(cell(length(segs)-1,1));
 for k=1:length(segs)-1
     in_bin=D2.pulse>=segs(k) & D2.pulse <=segs(k+1);
     D3a.med(k)=median(D2.h(in_bin));
@@ -211,19 +210,26 @@ for k=1:length(segs)-1
         Hmed=median(D2sub0.h(in_HW));
         in_HW=abs(D2sub0.h-Hmed)<HW/2;
     end
-    D2sub(k)=index_struct(D2sub0, in_HW);
+    D2sub=index_struct(D2sub0, in_HW);
     
     % calc the uncorrected statistics;
-    D3u.med(k)=median(D2sub(k).h);
-    D3u.centroid(k)=mean(D2sub(k).h);
-    [D3.count(k), D3u.count(k)]=deal(length(D2sub(k).h));
+    D3u.med(k)=median(D2sub.h);
+    D3u.centroid(k)=mean(D2sub.h);
+    [D3.count(k), D3u.count(k)]=deal(length(D2sub.h));
+    
+    sigma_rx=robust_peak_width_CDF(D2sub.h/(-1.5e8), 58*HW/1.5e8*params.NoiseRate, HW*[-0.5 0.5]/(1.5e8));
     
     % correct the data
-    [t_bin{k}, bin_count{k}]=quick_hist(D2sub.h/(-1.5e8), CONSTANTS.dt_hist);
+    N_bins=ceil((HW/(1.5e8)/CONSTANTS.dt_hist/2))*2;
+    t_bin{k}=mean(D2sub.h/(-1.5e8))+(-N_bins/2:N_bins/2)*CONSTANTS.dt_hist;
+    %[t_bin{k}, bin_count{k}]=quick_hist(D2sub.h/(-1.5e8), CONSTANTS.dt_hist);
+    bin_count{k}=my_histc(D2sub.h/(-1.5e8), t_bin{k});
     %[dM, dCtr]=correct_for_TX_shape(t, z, t_TX, TX, HW, Nrate, N_sig)
-    D3.N_noise=58*HW/1.5e8*params.NoiseRate;
-    D3.N_signal_est=sum(bin_count{k})-D3.N_noise;
-    [dM, dCtr, syn_wf]=correct_for_TX_shape(t_bin{k}, bin_count{k}, params.WF.t, params.WF.p, HW/1.5e8, params.NoiseRate, params.N_per_pulse*58);
+    D3.N_noise(k)=58*HW/1.5e8*params.NoiseRate;
+    D3.N_signal_est(k)=sum(bin_count{k})-D3.N_noise(k);
+    D3.SNR=max(0,D3.N_signal_est(k)./max(1,D3.N_noise(k)));
+    [dM, dCtr, syn_wf]=correct_for_TX_shape(params.WF.t, params.WF.p, HW/1.5e8, sigma_rx, D3.SNR);
+    %[dM, dCtr, syn_wf]=correct_for_TX_shape_bnds(params.WF.t, params.WF.p, HW/1.5e8, sigma_rx, D3.SNR);
     D3.med(k)=D3u.med(k)+dM;
     D3.centroid(k)=D3u.centroid(k)+dCtr;
     D3.Hctr=Hmed;

@@ -38,20 +38,20 @@ fields.corrected_h={'ref_pt_lat',  'ref_pt_lon', 'mean_pass_time', ...
     'pass_h_shapecorr', 'pass_h_shapecorr_sigma','pass_h_shapecorr_sigma_systematic', ...
     'pass_included_in_fit','pass_quality_summary'};
 % reference_points group
-fields.reference_point={'PT', 'RGT', 'L_search', 'rgt_azimuth', 'x_ATC', 'y_ATC'};
+fields.reference_point={'PT', 'RGT', 'L_search', 'ref_azimuth', 'x_ATC', 'y_ATC'};
 % reference surface group
 fields.ref_surf={  'slope_change_rate','slope_change_rate_sigma','poly_ref_surf', 'poly_ref_surf_sigma', ...
     'surf_fit_misfit_RMS','surf_fit_misfit_chi2', ...
     'N_cycle_avail', 'N_cycle_fit', ...
     'fit_X_slope', 'fit_Y_slope','fit_curvature', 'ATL11_status', 'P_value'};
 % pass quality stats
-fields.pass_quality={'ATL06_summary_zero_count','min_SNR_significance','mean_uncorr_reflectance','min_signal_selection_source'};
+fields.pass_quality={'atl06_summary_zero_count','min_snr_significance','mean_uncorr_reflectance','min_signal_selection_source'};
 % pass stats
 fields.pass_stats={'h_robust_spread_mean', 'h_rms_mean', 'reflct_uncorr_mean', 'tide_ocean_mean','mean_pass_lat',  'mean_pass_lon', ...
-    'h_robust_spread_mean', 'cloud_flg_best', 'bsl_h_mean', 'bslh_conf_best', 'laser_beam', 'y_RGT', 'ref_pt_number', ...
+    'h_robust_spread_mean', 'cloud_flg_best', 'bsl_h_mean', 'bslh_conf_best', 'laser_beam', 'y_atc', 'ref_pt_number', ...
     'sigma_g_h', 'sigma_g_x', 'sigma_g_y', 'snr_mean'};
 % fields that aren't on ATL11 but are useful here 
-fields.non_product={'z0' 'delta_z_signal', 'delta_z_error','delta_z_firn','x_PS_ctr', 'y_PS_ctr'};
+%fields.non_product={'z0' 'delta_z_signal', 'delta_z_error','delta_z_firn','x_PS_ctr', 'y_PS_ctr'};
  
 f0=fieldnames(fields);
 for kF0=1:length(f0)
@@ -71,7 +71,7 @@ fit_rep_x0_list=unique(valid.Rep_x0(valid.combined,:),'rows');
 if length(unique(fit_rep_x0_list(:,1))) < 2
     return
 end
-Rep_x0=[D3a.rep(:), D3a.x_RGT(:)];
+Rep_x0=[D3a.rep(:), D3a.x_atc(:)];
 fit_segs=ismember(Rep_x0, fit_rep_x0_list, 'rows');
 % 
 % % copy the segment stats
@@ -80,7 +80,7 @@ fit_segs=ismember(Rep_x0, fit_rep_x0_list, 'rows');
 %         D3b.segment_stats.(field{1})=D3a.(field{1})(:);
 %     end
 % end
-% D3b.segment_stats.seg_count=zeros(size(D3a.h_LI))+params.ref_pt_num;
+% D3b.segment_stats.seg_count=zeros(size(D3a.h_li))+params.ref_pt_num;
 % 
 % % copy the segment geolocation
 % for field=fields.segment_geolocation
@@ -104,11 +104,11 @@ poly_degree.x=min(params.max_degree_x, max(1, DOF_x-2));
 [fit_ctr.y, valid]=choose_y0(D3a, valid, params);
 
 % pick the x center.  If the data span the segment center, use it
-if min(D3a.x_RGT(fit_segs))< params.x_RGT_ctr && max(D3a.x_RGT(fit_segs)) > params.x_RGT_ctr
-    fit_ctr.x=params.x_RGT_ctr;
+if min(D3a.x_atc(fit_segs))< params.x_atc_ctr && max(D3a.x_atc(fit_segs)) > params.x_atc_ctr
+    fit_ctr.x=params.x_atc_ctr;
 else
     % otherwise, use the mean of the segment locations
-    fit_ctr.x=mean(range(D3a.x_RGT(fit_segs)));
+    fit_ctr.x=mean(range(D3a.x_atc(fit_segs)));
 end
 
 % if there is a time span longer than 1.5 years, fit for the delta_slope
@@ -137,17 +137,17 @@ if sum(valid.combined)==0; ATL11_status=bitor(ATL11_status, 1); end
 % assign corrected_h subgroup
 D3b.reference_point.x_ATC=fit_ctr.x;
 D3b.reference_point.y_ATC=fit_ctr.y;
-D3b.reference_point.rgt_azimuth=mean(D3a.azimuth(isfinite(D3a.azimuth)));   % should include a 360-degree wrap here
+D3b.reference_point.ref_azimuth=mean(D3a.ref_azimuth(isfinite(D3a.ref_azimuth)));   % should include a 360-degree wrap here
 
 fit_rep_list=find(CH.pass_included_in_fit); %find(~bitand(uint8(CH.cycle_selection_field), 16));
 % put together the mean pass time, etc
 [CH.mean_pass_time]=reduce_by(@mean, D3a,  {'time'},'rep', 1:N_reps);
-ref_pt_subset=index_struct(D3a, ismember(D3a.rep, fit_rep_list) & isfinite(D3a.x_RGT) & isfinite(D3a.y_RGT),{'lat_ctr','lon_ctr','x_RGT', 'y_RGT'});
-[CH.ref_pt_lat, CH.ref_pt_lon]=regress_to(ref_pt_subset, {'lat_ctr', 'lon_ctr'}, {'x_RGT','y_RGT'}, [fit_ctr.x, fit_ctr.y]);
+ref_pt_subset=index_struct(D3a, ismember(D3a.rep, fit_rep_list) & isfinite(D3a.x_atc) & isfinite(D3a.y_atc),{'latitude','longitude','x_atc', 'y_atc'});
+[CH.ref_pt_lat, CH.ref_pt_lon]=regress_to(ref_pt_subset, {'latitude', 'longitude'}, {'x_atc','y_atc'}, [fit_ctr.x, fit_ctr.y]);
 D3b.corrected_h=CH;
 
 % calculate weighted mean, etc fields in pass_stats
-weights=D3a.h_LI_sigma.^(-2); 
+weights=D3a.h_li_sigma.^(-2); 
 weights(~valid.selected_segs)=NaN;
 D3b.pass_stats=assign_pass_stats( D3a, weights,  1:N_reps, fields.pass_stats);
 
@@ -156,10 +156,10 @@ D3b.pass_stats=assign_pass_stats( D3a, weights,  1:N_reps, fields.pass_stats);
 D3b.corrected_h.pass_quality_summary=pass_quality_summary;
 
 % assign the non-product fields
-[D3a.x_PS_ctr, D3a.y_PS_ctr]=ll2ps(D3a.lat_ctr, D3a.lon_ctr);
-for k=1:length(fields.non_product)
-    D3b.non_product.(fields.non_product{k})= reduce_by(@mean, D3a,  fields.non_product(k) ,'rep', 1:N_reps);
-end
+% [D3a.x_PS_ctr, D3a.y_PS_ctr]=ll2ps(D3a.latitude, D3a.longitude);
+% for k=1:length(fields.non_product)
+%     D3b.non_product.(fields.non_product{k})= reduce_by(@mean, D3a,  fields.non_product(k) ,'rep', 1:N_reps);
+% end
 
 % assign reference point group outside of this function
 ff=fieldnames(RS);
@@ -210,7 +210,7 @@ function [CH, RS, SV, valid, params_out]=est_sigma_and_hrep(D3a, reps, valid,  f
 deg_ind=[params.poly_exp_x(:), params.poly_exp_y(:)];
 %  [hc_rep, sigma_hc_rep, sigma_hc_rep_systematic, m_surf, sigma_m_surf, h_poly_seg, sigma_h_poly_seg, r_fit, chi2_r]
 fields.perPass={'mean_pass_time', 'pass_h_shapecorr', 'pass_h_shapecorr_sigma','pass_h_shapecorr_sigma_systematic'};
-valid.selected_segs=false(size(D3a.h_LI));
+valid.selected_segs=false(size(D3a.h_li));
 
 fields.SV={'h_poly_seg','sigma_h_poly_seg','sigma_hc_seg_systematic'};
  
@@ -235,23 +235,23 @@ fit_Rep_x0=valid.Rep_x0(valid.combined,:);
 fit_reps=unique(fit_Rep_x0(:,1));
 N_fit_reps=length(unique(fit_Rep_x0(:,1)));
 
-Rep_x0=[D3a.rep(:), D3a.x_RGT(:)];
+Rep_x0=[D3a.rep(:), D3a.x_atc(:)];
 ref_fit_seg=ismember(Rep_x0, fit_Rep_x0,'rows');
 
-G_full_z0=zeros(size(D3a.h_LI(:),1),N_fit_reps);
+G_full_z0=zeros(size(D3a.h_li(:),1),N_fit_reps);
 for kr=1:length(fit_reps)
     G_full_z0(ismember(Rep_x0, fit_Rep_x0,'rows') & D3a.rep==fit_reps(kr), kr)=1;
 end
 
-[G_full_poly, poly_coeff_degree]=poly2_fit_mat((D3a.x_RGT(:)-fit_ctr.x)/params.y_scale, (D3a.y_RGT(:)-fit_ctr.y)/params.y_scale, poly_degree);
+[G_full_poly, poly_coeff_degree]=poly2_fit_mat((D3a.x_atc(:)-fit_ctr.x)/params.y_scale, (D3a.y_atc(:)-fit_ctr.y)/params.y_scale, poly_degree);
 
 % fit for change in slope iff we are fitting for it.
 G_full_dsdt=[];
 if poly_degree.x > 0
-    G_full_dsdt=[G_full_dsdt (D3a.x_RGT(:)-fit_ctr.x)/params.y_scale.*(D3a.time(:)-t0)/params.t_scale];
+    G_full_dsdt=[G_full_dsdt (D3a.x_atc(:)-fit_ctr.x)/params.y_scale.*(D3a.time(:)-t0)/params.t_scale];
 end
 if poly_degree.y > 0
-    G_full_dsdt=[G_full_dsdt (D3a.y_RGT(:)-fit_ctr.y)/params.y_scale.*(D3a.time(:)-t0)/params.t_scale];
+    G_full_dsdt=[G_full_dsdt (D3a.y_atc(:)-fit_ctr.y)/params.y_scale.*(D3a.time(:)-t0)/params.t_scale];
 end
 
 % build the table of contents for G
@@ -260,7 +260,7 @@ TOC.cols.poly=TOC.cols.dsdt(end)+(1:size(G_full_poly,2));
 TOC.cols.poly_degree=poly_coeff_degree;
 TOC.cols.z0=TOC.cols.poly(end)+(1:size(G_full_z0,2));
 
-sigma_seg=sqrt(D3a.h_LI_sigma.^2+params.sigma_geo.^2*(D3a.dh_fit_dx.^2+D3a.dh_fit_dy.^2));
+sigma_seg=sqrt(D3a.h_li_sigma.^2+params.sigma_geo.^2*(D3a.dh_fit_dx.^2+D3a.dh_fit_dy.^2));
 
 G=[G_full_dsdt, G_full_poly, G_full_z0];
 this_fit_seg=ref_fit_seg(:);
@@ -286,10 +286,10 @@ for k=1:N_iterations_max
     end
     G1inv=(G1'*Cinv_sub*G1)\G1';
     m1=zeros([size(G,2),1]);
-    m1(cols)=G1inv*Cinv_sub*D3a.h_LI(this_fit_seg);
+    m1(cols)=G1inv*Cinv_sub*D3a.h_li(this_fit_seg);
     
     % calculate the misfit statistics:
-    r_fit=D3a.h_LI(this_fit_seg)-G1*m1(cols);
+    r_fit=D3a.h_li(this_fit_seg)-G1*m1(cols);
     this_sigma=iqr(r_fit./sigma_seg(this_fit_seg))/2;
     RS.surf_fit_misfit_chi2=(r_fit'*Cinv_sub*r_fit);
     % P value--- ~1 means a good misfit
@@ -297,7 +297,7 @@ for k=1:N_iterations_max
     
     if  RS.P_value < 0.025 && k < N_iterations_max
         % iterate if we're too far from a reasonable chi2 value
-        this_r=D3a.h_LI-G*m1;
+        this_r=D3a.h_li-G*m1;
         next_fit_seg = ref_fit_seg & abs(this_r./sigma_seg) < 3*this_sigma;
         if all(next_fit_seg==this_fit_seg); this_fit_seg=next_fit_seg; continue; end
         this_fit_seg=next_fit_seg;
@@ -316,12 +316,12 @@ end
 RS.surf_fit_misfit_RMS=sqrt(mean(r_fit.^2));
 % report the seg selection
 valid.iterative_edit_seg=this_fit_seg;
-valid.iterative_edit_pair=ismember(valid.Rep_x0,[D3a.rep(this_fit_seg), D3a.x_RGT(this_fit_seg)],'rows');
+valid.iterative_edit_pair=ismember(valid.Rep_x0,[D3a.rep(this_fit_seg), D3a.x_atc(this_fit_seg)],'rows');
 valid.iterative_edit_rep=ismember(valid.Rep_x0(:,1), D3a.rep(this_fit_seg));
 
 % calculate the surface curvature and slope
-XR=round_to(range(D3a.x_RGT(:)-fit_ctr.x), 10)+[-10 10];
-YR=round_to(range(D3a.y_RGT(:)-fit_ctr.y), 10)+[-10 10];
+XR=round_to(range(D3a.x_atc(:)-fit_ctr.x), 10)+[-10 10];
+YR=round_to(range(D3a.y_atc(:)-fit_ctr.y), 10)+[-10 10];
 [xg,yg]=meshgrid(XR(1):10:XR(2), YR(1):10:YR(2)); 
 h_samp=poly2_fit_mat(xg/params.y_scale, yg/params.y_scale, poly_degree)*m1(TOC.cols.poly);
 [gx, gy]=gradient(reshape(h_samp, size(xg)), xg(1,:), yg(:,1)); 
@@ -330,15 +330,15 @@ ctr_els=abs(xg+1i*yg)<50;
 RS.fit_X_slope=mean(gx(ctr_els));
 RS.fit_Y_slope=mean(gy(ctr_els));
 RS.fit_curvature=sqrt(std(gx(ctr_els)).^2+std(gy(ctr_els)).^2); 
-seg_y_slope=interp2(xg(1,:), yg(:,1), gy, D3a.x_RGT(:)-fit_ctr.x, D3a.y_RGT(:)-fit_ctr.y);
-seg_x_slope=interp2(xg(1,:), yg(:,1), gx, D3a.x_RGT(:)-fit_ctr.x, D3a.y_RGT(:)-fit_ctr.y);
+seg_y_slope=interp2(xg(1,:), yg(:,1), gy, D3a.x_atc(:)-fit_ctr.x, D3a.y_atc(:)-fit_ctr.y);
+seg_x_slope=interp2(xg(1,:), yg(:,1), gx, D3a.x_atc(:)-fit_ctr.x, D3a.y_atc(:)-fit_ctr.y);
 
 % assign correlated errors in Cd for each pass, propagate the
 % errors to Cm
 if ~FailedFit
     [seg_r, seg_c]=ndgrid(D3a.rep(this_fit_seg));
-    %Cd_diag=spdiags(max(D3a.h_LI_sigma ,RS.surf_fit_misfit_RMS).^2, 0, sum(this_fit_seg), sum(this_fit_seg));
-    Cd_diag=spdiags(max(D3a.h_LI_sigma(this_fit_seg) ,RS.surf_fit_misfit_RMS).^2, 0, sum(this_fit_seg), sum(this_fit_seg));
+    %Cd_diag=spdiags(max(D3a.h_li_sigma ,RS.surf_fit_misfit_RMS).^2, 0, sum(this_fit_seg), sum(this_fit_seg));
+    Cd_diag=spdiags(max(D3a.h_li_sigma(this_fit_seg) ,RS.surf_fit_misfit_RMS).^2, 0, sum(this_fit_seg), sum(this_fit_seg));
     Cd_off_diag=params.sigma_geo.^2.*(RS.fit_X_slope.^2+RS.fit_Y_slope.^2 + RS.fit_curvature.^2)*(seg_r==seg_c);
     Cd_tot=Cd_diag+Cd_off_diag;
     Cm=G1inv*Cinv_sub*Cd_tot*Cinv_sub*G1inv';
@@ -394,8 +394,8 @@ rep_fit_mask=ismember(D3a.rep, fit_reps);
 % subset the polynomial matrix for non-fit data:
 if any(~rep_fit_mask)    
     % calculate corrected h for all segments, and the errors
-    hc_seg=D3a.h_LI-SV.h_poly_seg;
-    sigma_hc_seg=sqrt(D3a.h_LI_sigma.^2+SV.sigma_h_poly_seg.^2);
+    hc_seg=D3a.h_li-SV.h_poly_seg;
+    sigma_hc_seg=sqrt(D3a.h_li_sigma.^2+SV.sigma_h_poly_seg.^2);
     uRep=reps(~ismember(reps, fit_reps));
     % loop over non-fit reps
     for kR=1:length(uRep)
@@ -460,31 +460,31 @@ function [y0, valid]=choose_y0(D3a, valid, params)
 % if there is a tie: break the tie by picking the median y0_ref value
 %
 % required inputs :
-% structure D3a with fields rep, x_RGT, y_RGT
+% structure D3a with fields rep, x_atc, y_atc
 %
 % structure valid with fields x0, combined, slope_x
 %
 % structure params with fields ref_seg_Lsearch, beam_spacing
 
-Rep_x0= [D3a.rep(:), D3a.x_RGT(:)];
+Rep_x0= [D3a.rep(:), D3a.x_atc(:)];
 fit_rep_x0_list=valid.Rep_x0(valid.combined,:);
 
 % choose y0
 fit_seg=ismember(Rep_x0, fit_rep_x0_list,'rows');
-y_vals=min(D3a.y_RGT(fit_seg)):2:max(D3a.y_RGT(fit_seg));
+y_vals=min(D3a.y_atc(fit_seg)):2:max(D3a.y_atc(fit_seg));
 rep_count=zeros(size(y_vals));
 % 
 % uReps=unique(fit_rep_x0_list(:,1));
 % for kR=1:length(uReps);
-%     YR=range(D3a.y_RGT(D3a.rep==uReps(kR)));
+%     YR=range(D3a.y_atc(D3a.rep==uReps(kR)));
 %     these=y_vals >=YR(1) & y_vals <= YR(2);
 %     rep_count(these)=rep_count(these)+1;
 % end
 % y0=median(y_vals(rep_count==max(rep_count)));
 for k=1:size(fit_rep_x0_list,1)
     these=D3a.rep==fit_rep_x0_list(k);
-    if diff(range(D3a.beam(these)))>0
-        this_y=D3a.y_RGT(these);
+    if diff(range(D3a.laser_beam(these)))>0
+        this_y=D3a.y_atc(these);
         YR(k,:)=range(this_y(:));
     end
 end
@@ -498,14 +498,14 @@ y0=median(y_vals(rep_count==max(rep_count)));
 valid.dist=false(size(valid.slope_x));
 for k=1:size(fit_rep_x0_list,1)
     these=D3a.rep==fit_rep_x0_list(k);
-    this_y=D3a.y_RGT(these);
+    this_y=D3a.y_atc(these);
     
     these(these)=abs(this_y-y0)<=params.ref_seg_Lsearch;
-    if any(these(:)) && any(D3a.beam(these)==1) && any(D3a.beam(these)==2)
+    if any(these(:)) && any(D3a.laser_beam(these)==1) && any(D3a.laser_beam(these)==2)
         valid.dist(k)=true;
     end
     
-%     if min(abs(D3a.y_RGT(D3a.rep==fit_rep_x0_list(k))-y0))<params.ref_seg_Lsearch-params.beam_spacing/2;
+%     if min(abs(D3a.y_atc(D3a.rep==fit_rep_x0_list(k))-y0))<params.ref_seg_Lsearch-params.beam_spacing/2;
 %         valid.dist(k)=true;
 %     end
 end
@@ -520,28 +520,28 @@ else
 end
 
 % data-based edits 
-Vmat=[D3a.n_fit_photons >=10  D3a.signal_selection_source <=2  D3a.ATL06_status==0  isfinite(D3a.h_LI)  isfinite(D3a.h_LI_sigma) D3a.SNR_significance < 0.05];
-Vmat=[Vmat D3a.h_LI_sigma < 3*max(0.2,median(D3a.h_LI_sigma(all(Vmat,2))))];
-%seg_valid.data=D3a.n_fit_photons >=10 & D3a.signal_selection_flags < 32 & D3a.ATL06_status==0 & isfinite(D3a.h_LI) & isfinite(D3a.h_LI_sigma);
-%seg_valid.data=seg_valid.data & D3a.h_LI_sigma < 3*median(D3a.h_LI_sigma(seg_valid.data));
+Vmat=[D3a.n_fit_photons >=10  D3a.signal_selection_source <=2  D3a.atl06_quality_summary==0  isfinite(D3a.h_li)  isfinite(D3a.h_li_sigma) D3a.snr_significance < 0.05];
+Vmat=[Vmat D3a.h_li_sigma < 3*max(0.2,median(D3a.h_li_sigma(all(Vmat,2))))];
+%seg_valid.data=D3a.n_fit_photons >=10 & D3a.signal_selection_flags < 32 & D3a.atl06_status==0 & isfinite(D3a.h_li) & isfinite(D3a.h_li_sigma);
+%seg_valid.data=seg_valid.data & D3a.h_li_sigma < 3*median(D3a.h_li_sigma(seg_valid.data));
 seg_valid.data=all(Vmat,2);
 y_scale=100;
 
-Rep_x0=[D3a.rep, D3a.x_RGT];
+Rep_x0=[D3a.rep, D3a.x_atc];
 uRep_x0=unique(Rep_x0,'rows');
 
-% loop over ATL06 seg pairs, count valid data segs, select representative x
+% loop over atl06 seg pairs, count valid data segs, select representative x
 % and y values
 [dhdy, ybar,   sigma_dhdy, xpair, r_slope_y]=deal(NaN(size(uRep_x0,1),1));
 [valid.data, valid.slope_x, valid.slope_y]=deal(false(size(uRep_x0,1),1));
 for kR=1:size(uRep_x0,1)
-    these=find(D3a.rep==uRep_x0(kR,1) & D3a.x_RGT==uRep_x0(kR,2));
+    these=find(D3a.rep==uRep_x0(kR,1) & D3a.x_atc==uRep_x0(kR,2));
     % check if we have a pair
     if length(these)==2
         dhdy(kR)=mean(D3a.dh_fit_dy(these));
-        ybar(kR)=mean(D3a.y_RGT(these));
+        ybar(kR)=mean(D3a.y_atc(these));
         sigma_dhdy(kR)=median(D3a.sigma_dh_fit_dy(these));
-        xpair(kR)=mean(D3a.x_RGT(these));
+        xpair(kR)=mean(D3a.x_atc(these));
         if sum(seg_valid.data(these))==2
             valid.data(kR)=true;
         end
@@ -566,7 +566,7 @@ for k=1:2
     this_degree= struct('x', double(diff(range(xpair(good)))>0),'y',double(diff(range(ybar(good)))>0));
         
     G_slope_y=[ones(N_good,1), ...
-        poly2_fit_mat((xpair(good)-params.x_RGT_ctr)/y_scale, (ybar(good)-Ymed)/y_scale,   this_degree)];
+        poly2_fit_mat((xpair(good)-params.x_atc_ctr)/y_scale, (ybar(good)-Ymed)/y_scale,   this_degree)];
         
     m_slope_y=(G_slope_y\dhdy(good));
     r_slope_y(good)=dhdy(good)-G_slope_y*(G_slope_y\dhdy(good));
@@ -580,7 +580,7 @@ valid.slope_y=good;
 if DOPLOT
     axes( params.axes(1,1));
     plot(ybar, dhdy,'kx'); hold on;
-    yvals=(min(D3a.y_RGT):5:max(D3a.y_RGT))';
+    yvals=(min(D3a.y_atc):5:max(D3a.y_atc))';
     Gtemp=[ones(length(yvals),1),poly_fit_mat((yvals-Ymed)/y_scale, 1)];
     plot(yvals, Gtemp*m_slope_y,'b', yvals, Gtemp*m_slope_y+slope_threshold_y,'b--', yvals, Gtemp*m_slope_y-slope_threshold_y,'b--')
     plot(ybar(good_slope_y), dhdy(good_slope_y),'ro')
@@ -588,8 +588,8 @@ if DOPLOT
 end
 
 % select by x slope (fit is by seg here);
-good_other_criteria=ismember([D3a.rep, D3a.x_RGT], uRep_x0(valid.dist & valid.data, :),'rows') & isfinite(D3a.dh_fit_dx);
-G_slope_x=[ones(size(good_other_criteria)), poly2_fit_mat((D3a.x_RGT-params.x_RGT_ctr)/y_scale, (D3a.y_RGT-Ymed)/y_scale, struct('x', 1,'y', 1))];
+good_other_criteria=ismember([D3a.rep, D3a.x_atc], uRep_x0(valid.dist & valid.data, :),'rows') & isfinite(D3a.dh_fit_dx);
+G_slope_x=[ones(size(good_other_criteria)), poly2_fit_mat((D3a.x_atc-params.x_atc_ctr)/y_scale, (D3a.y_atc-Ymed)/y_scale, struct('x', 1,'y', 1))];
 this_good=true(size(good_other_criteria));
 for k=1:2
     these=this_good&good_other_criteria;
@@ -598,14 +598,14 @@ for k=1:2
     r_slope_x=D3a.dh_fit_dx-G_slope_x(these_cols)*m_slope_x;
     %sigma_slope_x=iqr(r_slope_x(this_good&good_other_criteria))/2;
     sigma_slope_x=iqr(D3a.dh_fit_dx(these))/2;
-    slope_threshold_x=max([0.01, 3*sigma_slope_x, 3*median(D3a.sigma_dh_fit_dx(good))]);
+    slope_threshold_x=max([0.01, 3*sigma_slope_x, 3*median(D3a.dh_fit_dx_sigma(good))]);
     this_good=isfinite(r_slope_x) & abs(r_slope_x)< slope_threshold_x;
 end
 good_slope_x_seg=this_good;
 % map the good (by seg) back to the pairs
 % figure out which pairs have two good_slope_x values
 valid.slope_x=false(size(uRep_x0,1),1);
-seg_rep_x0=[D3a.rep, D3a.x_RGT];
+seg_rep_x0=[D3a.rep, D3a.x_atc];
 for k=1:size(uRep_x0,1)
     these=seg_rep_x0(:,1)==uRep_x0(k,1) & seg_rep_x0(:,2)==uRep_x0(k,2);
     valid.slope_x(k)=sum(good_slope_x_seg(these))==2;
@@ -616,10 +616,10 @@ valid.combined=all([valid.dist, valid.slope_x, valid.slope_y, valid.data], 2);
 
 if DOPLOT
     axes(params.axes(2,1));
-    plot(D3a.y_RGT(good_dist_seg), D3a.dh_fit_dx(good_dist_seg),'kx'); hold on;
+    plot(D3a.y_atc(good_dist_seg), D3a.dh_fit_dx(good_dist_seg),'kx'); hold on;
     plot(yvals, Gtemp*m_slope_x,'b', yvals, Gtemp*m_slope_x+slope_threshold_x,'b--', yvals, Gtemp*m_slope_x-slope_threshold_x,'b--')
     good=ismember(D3a.rep, good_reps);
-    plot(D3a.y_RGT(good), D3a.dh_fit_dx(good),'ro');
+    plot(D3a.y_atc(good), D3a.dh_fit_dx(good),'ro');
     ylabel('along-track slope');
 end
  
@@ -678,7 +678,7 @@ for k=1:length(out_fields)
 end
 
 for k=1:length(field_vals)
-    these=index_field==field_vals(k) & isfinite(D.x_RGT) & isfinite(index_field);
+    these=index_field==field_vals(k) & isfinite(D.x_atc) & isfinite(index_field);
     if any(these)
         for kf=1:length(out_fields)
             if ~isfield(D,out_fields{kf}); 
@@ -719,7 +719,7 @@ for k=1:length(out_fields)
 end
 
 for k=1:length(field_vals)
-    these=index_field==field_vals(k) & isfinite(D.x_RGT) & isfinite(index_field);
+    these=index_field==field_vals(k) & isfinite(D.x_atc) & isfinite(index_field);
     if any(these) && sum(weights(these))>0
         
         for kf=1:length(out_fields)
@@ -742,7 +742,7 @@ for kf=1:length(out_fields)
     stats.(out_fields{kf})=NaN(1,N_reps);
 end
 
-rep_x0=[D3a.rep, D3a.x_RGT];
+rep_x0=[D3a.rep, D3a.x_atc];
 uRep=unique(rep_x0(:,1));
 
  % for the fit reps, find the best of the values
@@ -754,8 +754,8 @@ for k=1:length(uRep)
         these=D3a.rep==uRep(k) & valid.selected_segs;
     end
     if any(these)
-        stats.ATL06_summary_zero_count(this_rep)=sum(D3a.ATL06_quality_summary(these)==0);
-        stats.min_SNR_significance(this_rep)=min(D3a.SNR_significance(these));
+        stats.atl06_summary_zero_count(this_rep)=sum(D3a.atl06_quality_summary(these)==0);
+        stats.min_snr_significance(this_rep)=min(D3a.snr_significance(these));
         %stats.max_uncorr_reflectance=max(D3a.reflect_uncorr(these));
         stats.min_signal_selection_source(this_rep)=min(D3a.signal_selection_source(these));
     end
@@ -763,7 +763,7 @@ end
 
 stats.mean_uncorr_reflectance=reduce_by(@mean, D3a, {'reflct_uncorr'},'rep', 1:N_reps);
 
-summary=~(stats.min_signal_selection_source<=1 | stats.min_SNR_significance <0.02 | stats.ATL06_summary_zero_count >0);
+summary=~(stats.min_signal_selection_source<=1 | stats.min_snr_significance <0.02 | stats.atl06_summary_zero_count >0);
 
 %--------------------------------------------------
 function PS=assign_pass_stats(D3a, weights, reps, fields)
@@ -773,11 +773,11 @@ for kf=1:length(fields)
 end
 
 %reduce_by(fh, D, out_fields, index_field_name, field_vals)
-[PS.bsl_h_mean, PS.sigma_g_h, PS.sigma_g_x, PS.sigma_g_y, PS.laser_beam, PS.y_RGT,  PS.mean_pass_lat, PS.mean_pass_lon]=...
-   reduce_by(@mean, D3a, {'bsl_h', 'sigma_g_h', 'sigma_g_x','sigma_g_y', 'laser_beam', 'y_RGT','lat_ctr','lon_ctr'}, 'rep', reps);
+[PS.bsl_h_mean, PS.sigma_g_h, PS.sigma_g_x, PS.sigma_g_y, PS.laser_beam, PS.y_atc,  PS.mean_pass_lat, PS.mean_pass_lon]=...
+   reduce_by(@mean, D3a, {'bsl_h', 'sigma_g_h', 'sigma_g_x','sigma_g_y', 'laser_beam', 'y_atc','latitude','longitude'}, 'rep', reps);
 [PS.bslh_conf_best, PS.cloud_flg_best]=reduce_by(@min, D3a, {'bslh_conf', 'cloud_flg'},'rep', reps);
 [ PS.h_robust_spread_mean, PS.reflct_uncorr_mean, PS.h_rms_mean, PS.tide_ocean_mean, PS.snr_mean] = ...
-    weighted_mean_by( D3a, weights,  { 'h_robust_spread', 'reflct_uncorr', 'h_rms','tide_ocean', 'SNR'}, 'rep', reps);
+    weighted_mean_by( D3a, weights,  { 'h_robust_spread', 'reflct_uncorr', 'h_rms_misft','tide_ocean', 'snr'}, 'rep', reps);
 
  
   
